@@ -5,7 +5,7 @@ const paymentSchema = new mongoose.Schema(
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: false,
     },
 
     contestantId: {
@@ -32,9 +32,14 @@ const paymentSchema = new mongoose.Schema(
       required: true,
     },
 
+    votesGenerated: {
+      type: Number,
+      default: 0,
+    },
+
     type: {
       type: String,
-      enum: ["registration"],
+      enum: ["registration", "voting"],
       default: "registration",
     },
 

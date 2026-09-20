@@ -3,6 +3,8 @@ const router = express.Router();
 const {
   handleReviewApplication,
   fetchApplications,
+  fetchPayments,
+  fetchDashboardStats,
   handleInvalidateVote,
   fetchVoteAuditLogs,
   fetchFinalSelections,
@@ -15,8 +17,11 @@ const { protect, requireAdmin } = require("../middleware/auth.middleware");
 // Require JWT and Admin Role
 router.use(protect, requireAdmin);
 
+router.get("/stats", fetchDashboardStats);
 router.get("/applications", fetchApplications);
 router.patch("/applications/:id/status", handleReviewApplication);
+
+router.get("/payments", fetchPayments);
 
 router.get("/votes", fetchVoteAuditLogs);
 router.post("/votes/invalidate", handleInvalidateVote);

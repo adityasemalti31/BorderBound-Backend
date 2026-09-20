@@ -114,11 +114,16 @@ const initiateRegistrationPayment = async (req, res) => {
   }
 };
 
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
+
 const handlePayUSuccess = async (req, res) => {
   try {
     const userId = req.body.udf1;
 
     if (!userId) {
+      if (req.headers.accept?.includes("text/html") || req.method === "POST") {
+        return res.redirect(`${FRONTEND_URL}/dashboard?payment=failed&reason=User%20ID%20missing`);
+      }
       return res.status(400).json({
         success: false,
         message: "User identification missing.",
@@ -130,9 +135,17 @@ const handlePayUSuccess = async (req, res) => {
       req.body
     );
 
+    if (req.headers.accept?.includes("text/html") || req.headers["content-type"]?.includes("application/x-www-form-urlencoded")) {
+      return res.redirect(`${FRONTEND_URL}/dashboard?payment=success&txnid=${req.body.txnid || ""}`);
+    }
+
     res.status(200).json(result);
   } catch (error) {
     console.error("PayU success callback error:", error);
+
+    if (req.headers.accept?.includes("text/html") || req.headers["content-type"]?.includes("application/x-www-form-urlencoded")) {
+      return res.redirect(`${FRONTEND_URL}/dashboard?payment=failed&reason=${encodeURIComponent(error.message)}`);
+    }
 
     res.status(400).json({
       success: false,
@@ -143,14 +156,25 @@ const handlePayUSuccess = async (req, res) => {
 
 const handlePayUFailure = async (req, res) => {
   try {
-    const result = await verifyRegistrationFee(
-      req.body.userId,
-      req.body
-    );
+    const userId = req.body.udf1 || req.body.userId;
+    if (userId) {
+      await verifyRegistrationFee(userId, req.body).catch(() => {});
+    }
 
-    res.status(200).json(result);
+    if (req.headers.accept?.includes("text/html") || req.headers["content-type"]?.includes("application/x-www-form-urlencoded")) {
+      return res.redirect(`${FRONTEND_URL}/dashboard?payment=failed&reason=Payment%20failed`);
+    }
+
+    res.status(400).json({
+      success: false,
+      message: "PayU payment failed or was cancelled.",
+    });
   } catch (error) {
     console.error("PayU failure callback:", error);
+
+    if (req.headers.accept?.includes("text/html") || req.headers["content-type"]?.includes("application/x-www-form-urlencoded")) {
+      return res.redirect(`${FRONTEND_URL}/dashboard?payment=failed&reason=${encodeURIComponent(error.message)}`);
+    }
 
     res.status(400).json({
       success: false,

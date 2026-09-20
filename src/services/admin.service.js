@@ -2,6 +2,7 @@ const ContestantProfile = require("../models/contestant.model");
 const User = require("../models/user.model");
 const VoteTransaction = require("../models/voteTransaction.model");
 const SystemConfig = require("../models/systemConfig.model");
+const Payment = require("../models/payment.model");
 const { refreshLeaderboardRanks } = require("./leaderboard.service");
 
 // Step 6: Application Review & Approval / Rejection
@@ -47,10 +48,29 @@ const reviewApplication = async (contestantId, { action, rejectionReason }) => {
   }
 };
 
-// List all applications with status filter
-const getApplications = async ({ status, page = 1, limit = 20 }) => {
+// List all applications with status & search filters
+const getApplications = async ({ status, search, page = 1, limit = 20, exportAll = false }) => {
   const query = {};
   if (status) query.status = status;
+
+  if (search) {
+    const searchRegex = new RegExp(search, "i");
+    query.$or = [
+      { fullName: searchRegex },
+      { applicationId: searchRegex },
+      { email: searchRegex },
+      { mobile: searchRegex },
+      { city: searchRegex },
+      { state: searchRegex },
+    ];
+  }
+
+  if (exportAll === "true" || exportAll === true) {
+    const applications = await ContestantProfile.find(query)
+      .populate("userId", "fullName email mobile")
+      .sort({ createdAt: -1 });
+    return { applications, total: applications.length };
+  }
 
   const skip = (page - 1) * limit;
 
@@ -58,7 +78,7 @@ const getApplications = async ({ status, page = 1, limit = 20 }) => {
     .populate("userId", "fullName email mobile")
     .sort({ createdAt: -1 })
     .skip(skip)
-    .limit(limit);
+    .limit(Number(limit));
 
   const total = await ContestantProfile.countDocuments(query);
 
@@ -67,6 +87,90 @@ const getApplications = async ({ status, page = 1, limit = 20 }) => {
     total,
     page: Number(page),
     pages: Math.ceil(total / limit),
+  };
+};
+
+// List all payment records with filters & search
+const getPayments = async ({ status, type, search, page = 1, limit = 20, exportAll = false }) => {
+  const query = {};
+  if (status) query.status = status;
+  if (type) query.type = type;
+
+  if (search) {
+    const searchRegex = new RegExp(search, "i");
+    const matchingUsers = await User.find({
+      $or: [{ fullName: searchRegex }, { email: searchRegex }, { mobile: searchRegex }],
+    }).select("_id");
+
+    const matchingContestants = await ContestantProfile.find({
+      $or: [{ fullName: searchRegex }, { applicationId: searchRegex }, { email: searchRegex }],
+    }).select("_id");
+
+    const userIds = matchingUsers.map((u) => u._id);
+    const contestantIds = matchingContestants.map((c) => c._id);
+
+    query.$or = [
+      { txnid: searchRegex },
+      { mihpayid: searchRegex },
+      { bankReferenceNumber: searchRegex },
+      { userId: { $in: userIds } },
+      { contestantId: { $in: contestantIds } },
+    ];
+  }
+
+  if (exportAll === "true" || exportAll === true) {
+    const payments = await Payment.find(query)
+      .populate("userId", "fullName email mobile")
+      .populate("contestantId", "fullName applicationId email mobile")
+      .sort({ createdAt: -1 });
+
+    return { payments, total: payments.length };
+  }
+
+  const skip = (page - 1) * limit;
+  const payments = await Payment.find(query)
+    .populate("userId", "fullName email mobile")
+    .populate("contestantId", "fullName applicationId email mobile")
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(Number(limit));
+
+  const total = await Payment.countDocuments(query);
+
+  return {
+    payments,
+    total,
+    page: Number(page),
+    pages: Math.ceil(total / limit),
+  };
+};
+
+// Admin Dashboard Summary KPIs
+const getDashboardStats = async () => {
+  const totalApplications = await ContestantProfile.countDocuments();
+  const pendingApplications = await ContestantProfile.countDocuments({ status: "pending_review" });
+  const approvedApplications = await ContestantProfile.countDocuments({ status: "approved" });
+
+  const totalSuccessfulPayments = await Payment.countDocuments({ status: "success" });
+
+  const revenueResult = await Payment.aggregate([
+    { $match: { status: "success" } },
+    { $group: { _id: null, total: { $sum: "$amount" } } },
+  ]);
+  const totalRevenue = revenueResult.length > 0 ? revenueResult[0].total : 0;
+
+  const votesResult = await ContestantProfile.aggregate([
+    { $group: { _id: null, total: { $sum: "$totalValidVotes" } } },
+  ]);
+  const totalVotesCast = votesResult.length > 0 ? votesResult[0].total : 0;
+
+  return {
+    totalApplications,
+    pendingApplications,
+    approvedApplications,
+    totalSuccessfulPayments,
+    totalRevenue,
+    totalVotesCast,
   };
 };
 
@@ -274,6 +378,8 @@ const updateSystemConfig = async (configUpdates) => {
 module.exports = {
   reviewApplication,
   getApplications,
+  getPayments,
+  getDashboardStats,
   invalidateVoteTransaction,
   invalidateVotesByIp,
   calculateFinalSelections,

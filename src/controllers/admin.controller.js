@@ -1,6 +1,8 @@
 const {
   reviewApplication,
   getApplications,
+  getPayments,
+  getDashboardStats,
   invalidateVoteTransaction,
   invalidateVotesByIp,
   calculateFinalSelections,
@@ -32,6 +34,30 @@ const fetchApplications = async (req, res, next) => {
   }
 };
 
+const fetchPayments = async (req, res, next) => {
+  try {
+    const result = await getPayments(req.query);
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+const fetchDashboardStats = async (req, res, next) => {
+  try {
+    const stats = await getDashboardStats();
+    res.status(200).json({
+      success: true,
+      data: stats,
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
 const handleInvalidateVote = async (req, res, next) => {
   try {
     const { transactionId, voterIp, reason } = req.body;
@@ -55,11 +81,22 @@ const handleInvalidateVote = async (req, res, next) => {
 
 const fetchVoteAuditLogs = async (req, res, next) => {
   try {
-    const { status, contestantId, voterIp, page = 1, limit = 20 } = req.query;
+    const { status, contestantId, voterIp, page = 1, limit = 20, exportAll } = req.query;
     const query = {};
     if (status) query.status = status;
     if (contestantId) query.contestantId = contestantId;
     if (voterIp) query.voterIp = voterIp;
+
+    if (exportAll === "true" || exportAll === true) {
+      const transactions = await VoteTransaction.find(query)
+        .populate("contestantId", "fullName applicationId")
+        .populate("voterUserId", "fullName email mobile")
+        .sort({ createdAt: -1 });
+      return res.status(200).json({
+        success: true,
+        data: { transactions, total: transactions.length },
+      });
+    }
 
     const skip = (page - 1) * limit;
 
@@ -133,6 +170,8 @@ const handleUpdateConfig = async (req, res, next) => {
 module.exports = {
   handleReviewApplication,
   fetchApplications,
+  fetchPayments,
+  fetchDashboardStats,
   handleInvalidateVote,
   fetchVoteAuditLogs,
   fetchFinalSelections,

@@ -214,6 +214,10 @@ const initiateRegistrationFee = async (userId, ipAddress, userAgent) => {
     email: user.email,
     phone: user.mobile,
     productinfo: "Borderbound Registration Fee",
+    type: "registration",
+    udf1: String(userId),
+    udf2: "registration",
+    udf3: String(profile._id),
     ipAddress,
     userAgent,
   });

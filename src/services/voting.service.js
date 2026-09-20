@@ -1,8 +1,9 @@
 const ContestantProfile = require("../models/contestant.model");
 const SystemConfig = require("../models/systemConfig.model");
 const VoteTransaction = require("../models/voteTransaction.model");
+const Payment = require("../models/payment.model");
 const { getVotingStatusInfo } = require("../utils/dateUtils");
-const { createOrder, verifySignature } = require("./payment.service");
+const { createPayment, verifyPayUResponseHash } = require("./payment.service");
 
 const getSystemConfig = async () => {
   let config = await SystemConfig.findOne({ key: "DEFAULT_CONFIG" });
@@ -63,12 +64,20 @@ const createVoteOrder = async ({ contestantId, votesCount, voterUserId, ipAddres
   const unitPrice = config.voteUnitPrice || 5;
   const amount = votesCount * unitPrice;
 
-  const orderData = await createOrder({
-    amount,
-    type: "voting",
+  const orderData = await createPayment({
     userId: voterUserId || null,
     contestantId,
+    amount,
+    type: "voting",
     votesGenerated: votesCount,
+    productinfo: `Borderbound Voting - ${votesCount} Votes for ${contestant.fullName}`,
+    firstname: "Voter",
+    email: "voter@borderbound.in",
+    phone: "9999999999",
+    udf1: String(voterUserId || "guest"),
+    udf2: "voting",
+    udf3: String(contestantId),
+    udf4: String(votesCount),
     ipAddress,
     userAgent,
   });
@@ -86,24 +95,62 @@ const createVoteOrder = async ({ contestantId, votesCount, voterUserId, ipAddres
 };
 
 // Step 11 Verification: Verify Vote Payment and Atomically Allocate Votes
-const verifyVotePayment = async ({ razorpayOrderId, razorpayPaymentId, razorpaySignature, voterIp }) => {
+const verifyVotePayment = async (paymentData) => {
   const config = await getSystemConfig();
   if (config.isFinalized) {
     throw new Error("Voting period is officially finalized. No new votes can be verified.");
   }
 
-  const payment = await verifySignature({
-    razorpayOrderId,
-    razorpayPaymentId,
-    razorpaySignature,
-  });
+  const { txnid, status, hash, voterIp, udf3, udf4 } = paymentData;
+
+  if (!txnid || !status || !hash) {
+    throw new Error("Invalid PayU payment response.");
+  }
+
+  const isValidHash = verifyPayUResponseHash(paymentData);
+  if (!isValidHash) {
+    throw new Error("Payment verification failed.");
+  }
+
+  const payment = await Payment.findOne({ txnid });
+  if (!payment) {
+    throw new Error("Payment transaction not found.");
+  }
 
   if (payment.type !== "voting") {
     throw new Error("Payment is not a valid voting payment order.");
   }
 
-  const contestantId = payment.contestantId;
-  const votesCount = payment.votesGenerated;
+  if (status !== "success") {
+    payment.status = "failed";
+    payment.rawResponse = paymentData;
+    await payment.save();
+    throw new Error("Payment was not successful.");
+  }
+
+  if (payment.status === "success") {
+    const contestant = await ContestantProfile.findById(payment.contestantId);
+    return {
+      success: true,
+      message: "Payment already verified.",
+      contestant: contestant ? {
+        id: contestant._id,
+        fullName: contestant.fullName,
+        totalValidVotes: contestant.totalValidVotes,
+        currentRank: contestant.rank,
+      } : null,
+    };
+  }
+
+  payment.status = "success";
+  payment.mihpayid = paymentData.mihpayid || null;
+  payment.paymentMode = paymentData.mode || null;
+  payment.bankReferenceNumber = paymentData.bank_ref_num || null;
+  payment.rawResponse = paymentData;
+  await payment.save();
+
+  const contestantId = payment.contestantId || udf3;
+  const votesCount = payment.votesGenerated || Number(udf4) || 1;
 
   // Atomically increment contestant's total valid votes and update timestamp
   const updatedContestant = await ContestantProfile.findByIdAndUpdate(

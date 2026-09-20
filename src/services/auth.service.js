@@ -1,8 +1,6 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/user.model");
-const ContestantProfile = require("../models/contestant.model");
-
 
 const generateOtp = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -17,21 +15,12 @@ const generateToken = (user) => {
     process.env.JWT_SECRET,
     {
       expiresIn: "7d",
-    }
+    },
   );
 };
 
 const registerUser = async (data) => {
-  const {
-    fullName,
-    mobile,
-    email,
-    dob,
-    gender,
-    city,
-    state,
-    password,
-  } = data;
+  const { fullName, mobile, email, dob, gender, city, state, password } = data;
 
   if (
     !fullName ||
@@ -174,10 +163,7 @@ const loginUser = async (email, password) => {
     throw new Error("This account uses Google login");
   }
 
-  const isPasswordValid = await bcrypt.compare(
-    password,
-    user.password
-  );
+  const isPasswordValid = await bcrypt.compare(password, user.password);
 
   if (!isPasswordValid) {
     throw new Error("Invalid email or password");
@@ -200,12 +186,6 @@ const loginUser = async (email, password) => {
     token,
   };
 };
-
-
-
-
-
-
 
 module.exports = {
   registerUser,
