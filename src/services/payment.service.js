@@ -4,8 +4,8 @@ const Payment = require("../models/payment.model");
 const PAYU_KEY = process.env.PAYU_KEY || "mhrxT6";
 const PAYU_SALT = process.env.PAYU_SALT || "hfCyM3KlcIU3CVCbXaeFHEoqeYJef7bg";
 
-const PAYU_PAYMENT_URL =
-  process.env.PAYU_PAYMENT_URL || "https://test.payu.in/_payment";
+// const PAYU_PAYMENT_URL = process.env.PAYU_PAYMENT_URL || "https://test.payu.in/_payment";
+const PAYU_PAYMENT_URL = process.env.PAYU_PAYMENT_URL || "https://secure.payu.in/_payment";
 
 const BACKEND_URL = process.env.BACKEND_URL || "https://borderbound-backend.onrender.com";
 

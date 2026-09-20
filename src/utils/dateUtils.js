@@ -149,7 +149,7 @@ const getRegistrationFeeInfo = (currentDate = new Date(), config = null) => {
   }
 
   if (config && config.registrationStatusOverride === "force_open") {
-    const fee = config.regFeePhase1 || 499;
+    const fee = config.regFeePhase1 || 1;
 
     return {
       isClosed: false,
