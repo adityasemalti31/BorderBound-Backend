@@ -114,7 +114,7 @@ const initiateRegistrationPayment = async (req, res) => {
   }
 };
 
-const FRONTEND_URL  || "https://borderbound.vercel.app";
+const FRONTEND_URL = "https://borderbound.vercel.app";
 
 const handlePayUSuccess = async (req, res) => {
   try {
