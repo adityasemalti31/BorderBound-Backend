@@ -169,9 +169,9 @@ const loginUser = async (email, password) => {
     throw new Error("Invalid email or password");
   }
 
-  if (!user.mobileVerified) {
-    throw new Error("Please verify your mobile number first");
-  }
+  // if (!user.mobileVerified) {
+  //   throw new Error("Please verify your mobile number first");
+  // }
 
   const token = generateToken(user);
 
