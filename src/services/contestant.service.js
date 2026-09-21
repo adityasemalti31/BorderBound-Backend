@@ -342,7 +342,7 @@ const getPublicContestants = async ({
   page = 1,
   limit = 20,
 }) => {
-  const query = { isLive: true, status: "approved" };
+  const query = { status: "approved" };
 
   if (search) {
     query.$or = [
@@ -384,7 +384,6 @@ const getPublicContestants = async ({
 const getPublicContestantById = async (contestantId) => {
   const profile = await ContestantProfile.findOne({
     _id: contestantId,
-    isLive: true,
     status: "approved",
   }).select("-permanentAddress -emergencyContact -documents");
 
