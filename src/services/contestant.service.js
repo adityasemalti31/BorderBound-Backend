@@ -1,6 +1,7 @@
 const ContestantProfile = require("../models/contestant.model");
 const User = require("../models/user.model");
 const SystemConfig = require("../models/systemConfig.model");
+const Payment = require("../models/payment.model");
 const { getRegistrationFeeInfo } = require("../utils/dateUtils");
 const { createPayment, verifyPayUResponseHash } = require("./payment.service");
 const { uploadFile } = require("./upload.service");
