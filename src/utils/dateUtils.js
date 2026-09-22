@@ -223,7 +223,8 @@ const getVotingStatusInfo = (currentDate = new Date(), config = null) => {
 
   const year = currentDate.getFullYear();
 
-  const votingStart = new Date(year, 9, 15, 0, 0, 0); // 15 October
+  // const votingStart = new Date(year, 9, 15, 0, 0, 0); // 15 October
+  const votingStart = new Date(year, 8, 22, 0, 0, 0); // 22 September
   const votingEnd = new Date(year, 10, 15, 23, 59, 59); // 15 November
 
   if (currentDate < votingStart) {
