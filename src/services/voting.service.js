@@ -49,7 +49,7 @@ const createVoteOrder = async ({ contestantId, votesCount, voterUserId, ipAddres
 
   const contestant = await ContestantProfile.findOne({
     _id: contestantId,
-    isLive: true,
+    // isLive: true,
     status: "approved",
   });
 
