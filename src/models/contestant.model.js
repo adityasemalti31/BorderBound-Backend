@@ -15,6 +15,12 @@ const contestantProfileSchema = new mongoose.Schema(
       unique: true,
       index: true,
     },
+    slug: {
+      type: String,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
 
     // Step 2 Info
     fullName: { type: String, required: true, trim: true },
@@ -49,12 +55,22 @@ const contestantProfileSchema = new mongoose.Schema(
       {
         docType: {
           type: String,
-          enum: ["identity_proof", "dob_proof", "address_proof", "photograph", "other"],
+          enum: [
+            "identity_proof",
+            "dob_proof",
+            "address_proof",
+            "photograph",
+            "other",
+          ],
           required: true,
         },
         url: { type: String, required: true },
         publicId: { type: String, default: "" },
-        status: { type: String, enum: ["pending", "verified", "rejected"], default: "pending" },
+        status: {
+          type: String,
+          enum: ["pending", "verified", "rejected"],
+          default: "pending",
+        },
         uploadedAt: { type: Date, default: Date.now },
       },
     ],
@@ -76,7 +92,13 @@ const contestantProfileSchema = new mongoose.Schema(
     // Step 6 Review & Approval
     status: {
       type: String,
-      enum: ["draft", "pending_payment", "pending_review", "approved", "rejected"],
+      enum: [
+        "draft",
+        "pending_payment",
+        "pending_review",
+        "approved",
+        "rejected",
+      ],
       default: "draft",
     },
     rejectionReason: { type: String, default: "" },
@@ -100,7 +122,7 @@ const contestantProfileSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 contestantProfileSchema.index({ totalValidVotes: -1, updatedAt: 1 });

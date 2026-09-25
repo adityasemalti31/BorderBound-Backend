@@ -58,30 +58,59 @@ const createOrUpdateProfile = async (userId, profileData) => {
     );
   }
 
-  // Calculate age from DOB
   const dob = user.dob || new Date(profileData.dob);
+
   const age = Math.floor(
     (new Date() - new Date(dob)) / (365.25 * 24 * 60 * 60 * 1000),
   );
+
+  const generateSlug = (name) => {
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  };
 
   if (profile) {
     if (profile.status === "approved") {
       throw new Error("Approved contestant profile cannot be edited directly.");
     }
+
     profile.permanentAddress = permanentAddress;
     profile.occupation = occupation || profile.occupation;
     profile.education = education || profile.education;
     profile.bio = bio || profile.bio;
-    if (socialMedia)
-      profile.socialMedia = { ...profile.socialMedia, ...socialMedia };
-    if (emergencyContact) profile.emergencyContact = emergencyContact;
+
+    if (socialMedia) {
+      profile.socialMedia = {
+        ...profile.socialMedia,
+        ...socialMedia,
+      };
+    }
+
+    if (emergencyContact) {
+      profile.emergencyContact = emergencyContact;
+    }
+
+    // Generate slug for old profiles that don't have one
+    if (!profile.slug) {
+      profile.slug = generateSlug(profile.fullName);
+    }
+
     await profile.save();
   } else {
     const applicationId = await generateApplicationId();
+
+    const slug = generateSlug(user.fullName);
+
     profile = await ContestantProfile.create({
       userId,
       applicationId,
+
       fullName: user.fullName,
+      slug,
+
       dob: user.dob,
       age,
       gender: user.gender,
@@ -89,12 +118,15 @@ const createOrUpdateProfile = async (userId, profileData) => {
       email: user.email,
       city: user.city,
       state: user.state,
+
       permanentAddress,
       occupation: occupation || "",
       education: education || "",
       bio: bio || "",
+
       socialMedia: socialMedia || {},
       emergencyContact,
+
       status: "draft",
     });
 
