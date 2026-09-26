@@ -1,10 +1,10 @@
+
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/user.model");
 
-const generateOtp = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-};
+const { getAuth } = require("firebase-admin/auth");
+const firebaseApp = require("../config/firebase");
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -15,12 +15,21 @@ const generateToken = (user) => {
     process.env.JWT_SECRET,
     {
       expiresIn: "7d",
-    },
+    }
   );
 };
 
 const registerUser = async (data) => {
-  const { fullName, mobile, email, dob, gender, city, state, password } = data;
+  const {
+    fullName,
+    mobile,
+    email,
+    dob,
+    gender,
+    city,
+    state,
+    password,
+  } = data;
 
   if (
     !fullName ||
@@ -35,12 +44,14 @@ const registerUser = async (data) => {
     throw new Error("All fields are required");
   }
 
+  const normalizedEmail = email.toLowerCase().trim();
+
   const existingUser = await User.findOne({
-    $or: [{ email }, { mobile }],
+    $or: [{ email: normalizedEmail }, { mobile }],
   });
 
   if (existingUser) {
-    if (existingUser.email === email) {
+    if (existingUser.email === normalizedEmail) {
       throw new Error("Email already registered");
     }
 
@@ -51,59 +62,19 @@ const registerUser = async (data) => {
 
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  const otp = generateOtp();
-
   const user = await User.create({
     fullName,
     mobile,
-    email,
+    email: normalizedEmail,
     dob,
     gender,
     city,
     state,
     password: hashedPassword,
     authProvider: "local",
-    mobileVerified: false,
-    otp,
-    otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000),
+    role: "user",
+    status: "active",
   });
-
-  return {
-    userId: user._id,
-    mobile: user.mobile,
-    email: user.email,
-    otp,
-  };
-};
-
-const verifyOtp = async (userId, otp) => {
-  const user = await User.findById(userId);
-
-  if (!user) {
-    throw new Error("User not found");
-  }
-
-  if (user.mobileVerified) {
-    throw new Error("Mobile number already verified");
-  }
-
-  if (!user.otp || !user.otpExpiresAt) {
-    throw new Error("OTP not found");
-  }
-
-  if (user.otpExpiresAt < new Date()) {
-    throw new Error("OTP expired");
-  }
-
-  if (user.otp !== otp) {
-    throw new Error("Invalid OTP");
-  }
-
-  user.mobileVerified = true;
-  user.otp = null;
-  user.otpExpiresAt = null;
-
-  await user.save();
 
   const token = generateToken(user);
 
@@ -114,33 +85,9 @@ const verifyOtp = async (userId, otp) => {
       email: user.email,
       mobile: user.mobile,
       role: user.role,
+      authProvider: user.authProvider,
     },
     token,
-  };
-};
-
-const resendOtp = async (userId) => {
-  const user = await User.findById(userId);
-
-  if (!user) {
-    throw new Error("User not found");
-  }
-
-  if (user.mobileVerified) {
-    throw new Error("Mobile number already verified");
-  }
-
-  const otp = generateOtp();
-
-  user.otp = otp;
-  user.otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
-
-  await user.save();
-
-  return {
-    userId: user._id,
-    mobile: user.mobile,
-    otp,
   };
 };
 
@@ -149,7 +96,11 @@ const loginUser = async (email, password) => {
     throw new Error("Email and password are required");
   }
 
-  const user = await User.findOne({ email });
+  const normalizedEmail = email.toLowerCase().trim();
+
+  const user = await User.findOne({
+    email: normalizedEmail,
+  });
 
   if (!user) {
     throw new Error("Invalid email or password");
@@ -159,7 +110,7 @@ const loginUser = async (email, password) => {
     throw new Error("Your account has been blocked");
   }
 
-  if (user.authProvider === "google") {
+  if (user.authProvider === "google" && !user.password) {
     throw new Error("This account uses Google login");
   }
 
@@ -168,10 +119,6 @@ const loginUser = async (email, password) => {
   if (!isPasswordValid) {
     throw new Error("Invalid email or password");
   }
-
-  // if (!user.mobileVerified) {
-  //   throw new Error("Please verify your mobile number first");
-  // }
 
   const token = generateToken(user);
 
@@ -182,14 +129,47 @@ const loginUser = async (email, password) => {
       email: user.email,
       mobile: user.mobile,
       role: user.role,
+      authProvider: user.authProvider,
     },
     token,
   };
 };
 
+const googleLogin = async (idToken) => {
+  if (!idToken) {
+    throw new Error("Google ID token is required");
+  }
+
+  let decodedToken;
+
+  try {
+    decodedToken = await getAuth(firebaseApp).verifyIdToken(idToken);
+  } catch (error) {
+    console.error("Firebase token verification error:", error);
+    throw new Error("Invalid Google authentication token");
+  }
+
+  const {
+    uid,
+    email,
+    name,
+    picture,
+    email_verified,
+  } = decodedToken;
+
+  if (!email) {
+    throw new Error("Google account email is required");
+  }
+
+  if (!email_verified) {
+    throw new Error("Google email is not verified");
+  }
+
+  // baaki same...
+};
+
 module.exports = {
   registerUser,
-  verifyOtp,
-  resendOtp,
   loginUser,
+  googleLogin,
 };

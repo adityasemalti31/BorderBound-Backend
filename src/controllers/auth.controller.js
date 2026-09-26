@@ -1,33 +1,14 @@
+
 const {
   registerUser,
-  verifyOtp,
-  resendOtp,
   loginUser,
-  createContestantProfile
+  googleLogin,
+  createContestantProfile,
 } = require("../services/auth.service");
 
 const register = async (req, res) => {
   try {
     const result = await registerUser(req.body);
-
-    res.status(201).json({
-      success: true,
-      message: "Registration successful. OTP sent to your mobile number.",
-      data: result,
-    });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-const verifyMobileOtp = async (req, res) => {
-  try {
-    const { userId, otp } = req.body;
-
-    const result = await verifyOtp(userId, otp);
 
     res.cookie("token", result.token, {
       httpOnly: true,
@@ -36,28 +17,9 @@ const verifyMobileOtp = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    res.status(200).json({
+    res.status(201).json({
       success: true,
-      message: "Mobile number verified successfully",
-      data: result,
-    });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-const resendMobileOtp = async (req, res) => {
-  try {
-    const { userId } = req.body;
-
-    const result = await resendOtp(userId);
-
-    res.status(200).json({
-      success: true,
-      message: "OTP sent successfully",
+      message: "Registration successful",
       data: result,
     });
   } catch (error) {
@@ -84,13 +46,36 @@ const login = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Login successful",
-      data: {
-        user: result.user,
-        token: result.token,
-      },
+      data: result,
     });
   } catch (error) {
     res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const googleAuth = async (req, res) => {
+  try {
+    const { idToken } = req.body;
+
+    const result = await googleLogin(idToken);
+
+    res.cookie("token", result.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Google authentication successful",
+      data: result,
+    });
+  } catch (error) {
+    res.status(401).json({
       success: false,
       message: error.message,
     });
@@ -108,16 +93,12 @@ const getMe = async (req, res) => {
 
 const logout = async (req, res) => {
   res.clearCookie("token");
+
   res.status(200).json({
     success: true,
     message: "Logged out successfully.",
   });
 };
-
-
-
-
-
 
 const createContestantProfileController = async (req, res) => {
   try {
@@ -144,16 +125,10 @@ const createContestantProfileController = async (req, res) => {
 };
 
 module.exports = {
-  createContestantProfile,
-};
-
-
-module.exports = {
   register,
-  verifyMobileOtp,
-  resendMobileOtp,
   login,
+  googleAuth,
   getMe,
   logout,
-  createContestantProfileController
+  createContestantProfileController,
 };

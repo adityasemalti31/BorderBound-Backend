@@ -1,3 +1,4 @@
+
 const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema(
@@ -10,9 +11,10 @@ const userSchema = new mongoose.Schema(
 
     mobile: {
       type: String,
-      required: true,
       unique: true,
+      sparse: true,
       trim: true,
+      default: null,
     },
 
     email: {
@@ -25,25 +27,25 @@ const userSchema = new mongoose.Schema(
 
     dob: {
       type: Date,
-      required: true,
+      default: null,
     },
 
     gender: {
       type: String,
       enum: ["male", "female", "other"],
-      required: true,
+      default: null,
     },
 
     city: {
       type: String,
-      required: true,
       trim: true,
+      default: null,
     },
 
     state: {
       type: String,
-      required: true,
       trim: true,
+      default: null,
     },
 
     password: {
@@ -61,21 +63,6 @@ const userSchema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true,
-    },
-
-    mobileVerified: {
-      type: Boolean,
-      default: false,
-    },
-
-    otp: {
-      type: String,
-      default: null,
-    },
-
-    otpExpiresAt: {
-      type: Date,
-      default: null,
     },
 
     role: {
