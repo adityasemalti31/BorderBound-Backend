@@ -165,7 +165,69 @@ const googleLogin = async (idToken) => {
     throw new Error("Google email is not verified");
   }
 
-  // baaki same...
+  const normalizedEmail = email.toLowerCase().trim();
+
+  let user = await User.findOne({
+    $or: [
+      { firebaseUid: uid },
+      { email: normalizedEmail },
+    ],
+  });
+
+  if (user) {
+    if (user.status === "blocked") {
+      throw new Error("Your account has been blocked");
+    }
+
+    user.firebaseUid = uid;
+
+    if (!user.authProvider) {
+      user.authProvider = "google";
+    }
+
+    if (!user.fullName && name) {
+      user.fullName = name;
+    }
+
+    await user.save();
+  } else {
+    user = await User.create({
+      fullName: name || "Google User",
+      email: normalizedEmail,
+      firebaseUid: uid,
+      authProvider: "google",
+      password: null,
+      mobile: null,
+      dob: null,
+      gender: null,
+      city: null,
+      state: null,
+      role: "user",
+      status: "active",
+    });
+  }
+
+  const token = generateToken(user);
+
+  return {
+    user: {
+      id: user._id,
+      fullName: user.fullName,
+      email: user.email,
+      mobile: user.mobile,
+      role: user.role,
+      authProvider: user.authProvider,
+      profileImage: picture || null,
+      profileCompleted: Boolean(
+        user.mobile &&
+        user.dob &&
+        user.gender &&
+        user.city &&
+        user.state
+      ),
+    },
+    token,
+  };
 };
 
 module.exports = {
