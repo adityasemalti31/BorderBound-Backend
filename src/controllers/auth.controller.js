@@ -1,4 +1,3 @@
-
 const {
   registerUser,
   loginUser,
@@ -9,13 +8,6 @@ const {
 const register = async (req, res) => {
   try {
     const result = await registerUser(req.body);
-
-    res.cookie("token", result.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
 
     res.status(201).json({
       success: true,
@@ -36,13 +28,6 @@ const login = async (req, res) => {
 
     const result = await loginUser(email, password);
 
-    res.cookie("token", result.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-
     res.status(200).json({
       success: true,
       message: "Login successful",
@@ -62,19 +47,14 @@ const googleAuth = async (req, res) => {
 
     const result = await googleLogin(idToken);
 
-    res.cookie("token", result.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-
     res.status(200).json({
       success: true,
       message: "Google authentication successful",
       data: result,
     });
   } catch (error) {
+    console.error("Google Auth Error:", error);
+
     res.status(401).json({
       success: false,
       message: error.message,
@@ -92,8 +72,6 @@ const getMe = async (req, res) => {
 };
 
 const logout = async (req, res) => {
-  res.clearCookie("token");
-
   res.status(200).json({
     success: true,
     message: "Logged out successfully.",
