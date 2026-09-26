@@ -247,11 +247,6 @@ const forgotPassword = async (email) => {
     throw new Error("No account found with this email");
   }
 
-  if (user.authProvider === "google" && !user.password) {
-    throw new Error(
-      "This account uses Google login. Please continue with Google."
-    );
-  }
 
   const resetToken = crypto.randomBytes(32).toString("hex");
 
@@ -305,11 +300,7 @@ const resetPassword = async (token, newPassword) => {
     throw new Error("Invalid or expired reset link");
   }
 
-  if (user.authProvider === "google" && !user.password) {
-    throw new Error(
-      "This account uses Google login. Please continue with Google."
-    );
-  }
+ 
 
   const hashedPassword = await bcrypt.hash(newPassword, 12);
 
