@@ -57,17 +57,7 @@ const createOrUpdateProfile = async (userId, profileData) => {
     bio,
   } = profileData;
 
-  if (
-    !dob ||
-    !gender ||
-    !mobile ||
-    !city ||
-    !state
-  ) {
-    throw new Error(
-      "Date of birth, gender, mobile, city and state are required."
-    );
-  }
+ 
 
   if (
     !permanentAddress ||
