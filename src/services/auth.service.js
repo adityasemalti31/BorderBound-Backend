@@ -2,6 +2,8 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/user.model");
+const crypto = require("crypto");
+
 
 const { getAuth } = require("firebase-admin/auth");
 const firebaseApp = require("../config/firebase");
@@ -230,8 +232,104 @@ const googleLogin = async (idToken) => {
   };
 };
 
+const forgotPassword = async (email) => {
+  if (!email) {
+    throw new Error("Email is required");
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+
+  const user = await User.findOne({
+    email: normalizedEmail,
+  });
+
+  if (!user) {
+    throw new Error("No account found with this email");
+  }
+
+  if (user.authProvider === "google" && !user.password) {
+    throw new Error(
+      "This account uses Google login. Please continue with Google."
+    );
+  }
+
+  const resetToken = crypto.randomBytes(32).toString("hex");
+
+  const hashedToken = crypto
+    .createHash("sha256")
+    .update(resetToken)
+    .digest("hex");
+
+  user.resetPasswordToken = hashedToken;
+
+  user.resetPasswordExpires = new Date(
+    Date.now() + 15 * 60 * 1000
+  );
+
+  await user.save();
+
+  return {
+    resetToken,
+    email: user.email,
+    fullName: user.fullName,
+  };
+};
+
+
+const resetPassword = async (token, newPassword) => {
+  if (!token) {
+    throw new Error("Reset token is required");
+  }
+
+  if (!newPassword) {
+    throw new Error("New password is required");
+  }
+
+  if (newPassword.length < 8) {
+    throw new Error("Password must be at least 8 characters");
+  }
+
+  const hashedToken = crypto
+    .createHash("sha256")
+    .update(token)
+    .digest("hex");
+
+  const user = await User.findOne({
+    resetPasswordToken: hashedToken,
+    resetPasswordExpires: {
+      $gt: new Date(),
+    },
+  });
+
+  if (!user) {
+    throw new Error("Invalid or expired reset link");
+  }
+
+  if (user.authProvider === "google" && !user.password) {
+    throw new Error(
+      "This account uses Google login. Please continue with Google."
+    );
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+  user.password = hashedPassword;
+  user.authProvider = "local";
+
+  user.resetPasswordToken = null;
+  user.resetPasswordExpires = null;
+
+  await user.save();
+
+  return {
+    message: "Password reset successfully",
+  };
+};
+
 module.exports = {
   registerUser,
   loginUser,
   googleLogin,
+  forgotPassword,
+  resetPassword
 };

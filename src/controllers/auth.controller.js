@@ -3,6 +3,8 @@ const {
   loginUser,
   googleLogin,
   createContestantProfile,
+  forgotPassword,
+  resetPassword,
 } = require("../services/auth.service");
 
 const register = async (req, res) => {
@@ -102,6 +104,51 @@ const createContestantProfileController = async (req, res) => {
   }
 };
 
+
+
+
+const forgotPasswordController = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const result = await forgotPassword(email);
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset link generated successfully.",
+      data: result,
+    });
+  } catch (error) {
+    console.error("Forgot Password Error:", error);
+
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+const resetPasswordController = async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    const result = await resetPassword(token, password);
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+    });
+  } catch (error) {
+    console.error("Reset Password Error:", error);
+
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -109,4 +156,6 @@ module.exports = {
   getMe,
   logout,
   createContestantProfileController,
+  forgotPasswordController,
+  resetPasswordController
 };
