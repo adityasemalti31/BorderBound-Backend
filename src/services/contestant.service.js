@@ -28,10 +28,13 @@ const createOrUpdateProfile = async (userId, profileData) => {
   const feeInfo = getRegistrationFeeInfo(new Date(), config);
 
   if (feeInfo.isClosed) {
-    throw new Error(feeInfo.reason || "Registration is currently closed.");
+    throw new Error(
+      feeInfo.reason || "Registration is currently closed."
+    );
   }
 
   const user = await User.findById(userId);
+
   if (!user) {
     throw new Error("User not found.");
   }
@@ -39,6 +42,13 @@ const createOrUpdateProfile = async (userId, profileData) => {
   let profile = await ContestantProfile.findOne({ userId });
 
   const {
+    fullName,
+    dob,
+    gender,
+    mobile,
+    email,
+    city,
+    state,
     permanentAddress,
     occupation,
     education,
@@ -48,21 +58,42 @@ const createOrUpdateProfile = async (userId, profileData) => {
   } = profileData;
 
   if (
+    !dob ||
+    !gender ||
+    !mobile ||
+    !city ||
+    !state
+  ) {
+    throw new Error(
+      "Date of birth, gender, mobile, city and state are required."
+    );
+  }
+
+  if (
     !permanentAddress ||
     !emergencyContact ||
     !emergencyContact.name ||
     !emergencyContact.phone
   ) {
     throw new Error(
-      "Permanent address and Emergency contact details are required.",
+      "Permanent address and Emergency contact details are required."
     );
   }
 
-  const dob = user.dob || new Date(profileData.dob);
+  const parsedDob = new Date(dob);
+
+  if (Number.isNaN(parsedDob.getTime())) {
+    throw new Error("Please provide a valid date of birth.");
+  }
 
   const age = Math.floor(
-    (new Date() - new Date(dob)) / (365.25 * 24 * 60 * 60 * 1000),
+    (new Date() - parsedDob) /
+      (365.25 * 24 * 60 * 60 * 1000)
   );
+
+  if (age < 18) {
+    throw new Error("Contestant must be at least 18 years old.");
+  }
 
   const generateSlug = (name) => {
     return name
@@ -72,10 +103,35 @@ const createOrUpdateProfile = async (userId, profileData) => {
       .replace(/^-+|-+$/g, "");
   };
 
+  const finalFullName =
+    fullName?.trim() || user.fullName;
+
+  const finalEmail =
+    email?.toLowerCase().trim() || user.email;
+
+  if (!finalFullName) {
+    throw new Error("Full name is required.");
+  }
+
+  if (!finalEmail) {
+    throw new Error("Email is required.");
+  }
+
   if (profile) {
     if (profile.status === "approved") {
-      throw new Error("Approved contestant profile cannot be edited directly.");
+      throw new Error(
+        "Approved contestant profile cannot be edited directly."
+      );
     }
+
+    profile.fullName = finalFullName;
+    profile.dob = parsedDob;
+    profile.age = age;
+    profile.gender = gender;
+    profile.mobile = mobile;
+    profile.email = finalEmail;
+    profile.city = city;
+    profile.state = state;
 
     profile.permanentAddress = permanentAddress;
     profile.occupation = occupation || profile.occupation;
@@ -89,35 +145,32 @@ const createOrUpdateProfile = async (userId, profileData) => {
       };
     }
 
-    if (emergencyContact) {
-      profile.emergencyContact = emergencyContact;
-    }
+    profile.emergencyContact = emergencyContact;
 
-    // Generate slug for old profiles that don't have one
     if (!profile.slug) {
-      profile.slug = generateSlug(profile.fullName);
+      profile.slug = generateSlug(finalFullName);
     }
 
     await profile.save();
   } else {
     const applicationId = await generateApplicationId();
 
-    const slug = generateSlug(user.fullName);
+    const slug = generateSlug(finalFullName);
 
     profile = await ContestantProfile.create({
       userId,
       applicationId,
 
-      fullName: user.fullName,
+      fullName: finalFullName,
       slug,
 
-      dob: user.dob,
+      dob: parsedDob,
       age,
-      gender: user.gender,
-      mobile: user.mobile,
-      email: user.email,
-      city: user.city,
-      state: user.state,
+      gender,
+      mobile,
+      email: finalEmail,
+      city,
+      state,
 
       permanentAddress,
       occupation: occupation || "",
@@ -131,8 +184,18 @@ const createOrUpdateProfile = async (userId, profileData) => {
     });
 
     user.contestantProfile = profile._id;
-    await user.save();
   }
+
+  // Keep User data synced with the completed profile
+  user.fullName = finalFullName;
+  user.dob = parsedDob;
+  user.gender = gender;
+  user.mobile = mobile;
+  user.email = finalEmail;
+  user.city = city;
+  user.state = state;
+
+  await user.save();
 
   return profile;
 };
