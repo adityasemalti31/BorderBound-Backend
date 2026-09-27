@@ -113,17 +113,24 @@ const forgotPasswordController = async (req, res) => {
 
     const result = await forgotPassword(email);
 
-    const resetLink = result.resetLink;
+    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${result.resetToken}`;
 
     await sendEmail({
-      to: email,
-      subject: "Reset Your Co-Finder Password",
+      to: result.email,
+      subject: "Reset Your BorderBound Password",
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 30px;">
-          <h2 style="color: #111;">Reset Your Password</h2>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 30px; color: #111;">
+
+          <h2 style="margin-bottom: 10px;">
+            Reset Your Password
+          </h2>
 
           <p>
-            We received a request to reset your Co-Finder password.
+            Hi ${result.fullName || "there"},
+          </p>
+
+          <p>
+            We received a request to reset your BorderBound account password.
           </p>
 
           <p>
@@ -147,18 +154,19 @@ const forgotPasswordController = async (req, res) => {
             </a>
           </div>
 
-          <p style="color: #666;">
+          <p style="color: #666; font-size: 14px;">
+            This link will expire in 15 minutes.
+          </p>
+
+          <p style="color: #666; font-size: 14px;">
             If you didn't request a password reset, you can safely ignore this email.
           </p>
 
-          <p style="color: #666;">
-            This reset link will expire soon.
+          <p style="margin-top: 30px;">
+            Regards,<br />
+            <strong>The BorderBound Team</strong>
           </p>
 
-          <p>
-            Regards,<br />
-            <strong>Co-Finder Team</strong>
-          </p>
         </div>
       `,
     });
@@ -176,7 +184,6 @@ const forgotPasswordController = async (req, res) => {
     });
   }
 };
-
 
 const resetPasswordController = async (req, res) => {
   try {
