@@ -7,7 +7,7 @@ const {
   resetPassword,
 } = require("../services/auth.service");
 
-const sendEmail = require('../utils/sendEmail')
+const {sendEmail} = require('../utils/sendEmail')
 const register = async (req, res) => {
   try {
     const result = await registerUser(req.body);
