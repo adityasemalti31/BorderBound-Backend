@@ -7,6 +7,7 @@ const {
   resetPassword,
 } = require("../services/auth.service");
 
+const sendEmail = require('../utils/sendEmail')
 const register = async (req, res) => {
   try {
     const result = await registerUser(req.body);
@@ -106,17 +107,65 @@ const createContestantProfileController = async (req, res) => {
 
 
 
-
 const forgotPasswordController = async (req, res) => {
   try {
     const { email } = req.body;
 
     const result = await forgotPassword(email);
 
+    const resetLink = result.resetLink;
+
+    await sendEmail({
+      to: email,
+      subject: "Reset Your Co-Finder Password",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 30px;">
+          <h2 style="color: #111;">Reset Your Password</h2>
+
+          <p>
+            We received a request to reset your Co-Finder password.
+          </p>
+
+          <p>
+            Click the button below to create a new password:
+          </p>
+
+          <div style="margin: 30px 0;">
+            <a
+              href="${resetLink}"
+              style="
+                display: inline-block;
+                padding: 14px 24px;
+                background: #000;
+                color: #fff;
+                text-decoration: none;
+                border-radius: 8px;
+                font-weight: 600;
+              "
+            >
+              Reset Password
+            </a>
+          </div>
+
+          <p style="color: #666;">
+            If you didn't request a password reset, you can safely ignore this email.
+          </p>
+
+          <p style="color: #666;">
+            This reset link will expire soon.
+          </p>
+
+          <p>
+            Regards,<br />
+            <strong>Co-Finder Team</strong>
+          </p>
+        </div>
+      `,
+    });
+
     res.status(200).json({
       success: true,
-      message: "Password reset link generated successfully.",
-      data: result,
+      message: "Password reset link has been sent to your email.",
     });
   } catch (error) {
     console.error("Forgot Password Error:", error);
