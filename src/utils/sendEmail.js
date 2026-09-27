@@ -1,27 +1,32 @@
+const dns = require("dns");
 const nodemailer = require("nodemailer");
 
+dns.setDefaultResultOrder("ipv4first");
+
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.gmail.com",
-  port: Number(process.env.SMTP_PORT) || 587,
+  host: "smtp.gmail.com",
+  port: 587,
   secure: false,
   requireTLS: true,
+
+  family: 4,
 
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
 
-  connectionTimeout: 20000,
-  greetingTimeout: 20000,
-  socketTimeout: 20000,
+  connectionTimeout: 30000,
+  greetingTimeout: 30000,
+  socketTimeout: 30000,
 });
 
 const sendEmail = async ({ to, subject, html }) => {
   try {
-    console.log("Connecting to Gmail SMTP...");
+    console.log("Connecting to Gmail SMTP using IPv4...");
 
     const info = await transporter.sendMail({
-      from: process.env.MAIL_FROM || `"The BorderBound" <${process.env.SMTP_USER}>`,
+      from: `"The BorderBound" <${process.env.SMTP_USER}>`,
       to,
       subject,
       html,
