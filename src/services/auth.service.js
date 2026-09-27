@@ -233,7 +233,7 @@ const googleLogin = async (idToken) => {
 };
 
 const forgotPassword = async (email) => {
-  if (!email) {
+  if (!email || typeof email !== "string") {
     throw new Error("Email is required");
   }
 
@@ -247,6 +247,9 @@ const forgotPassword = async (email) => {
     throw new Error("No account found with this email");
   }
 
+  if (user.status === "blocked") {
+    throw new Error("Your account has been blocked");
+  }
 
   const resetToken = crypto.randomBytes(32).toString("hex");
 
@@ -256,12 +259,9 @@ const forgotPassword = async (email) => {
     .digest("hex");
 
   user.resetPasswordToken = hashedToken;
+  user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000);
 
-  user.resetPasswordExpires = new Date(
-    Date.now() + 15 * 60 * 1000
-  );
-
-  await user.save();
+  await user.save({ validateBeforeSave: false });
 
   return {
     resetToken,
@@ -269,7 +269,6 @@ const forgotPassword = async (email) => {
     fullName: user.fullName,
   };
 };
-
 
 const resetPassword = async (token, newPassword) => {
   if (!token) {
@@ -280,13 +279,15 @@ const resetPassword = async (token, newPassword) => {
     throw new Error("New password is required");
   }
 
-  if (newPassword.length < 8) {
+  if (typeof newPassword !== "string" || newPassword.length < 8) {
     throw new Error("Password must be at least 8 characters");
   }
 
+  const cleanToken = String(token).trim();
+
   const hashedToken = crypto
     .createHash("sha256")
-    .update(token)
+    .update(cleanToken)
     .digest("hex");
 
   const user = await User.findOne({
@@ -300,7 +301,9 @@ const resetPassword = async (token, newPassword) => {
     throw new Error("Invalid or expired reset link");
   }
 
- 
+  if (user.status === "blocked") {
+    throw new Error("Your account has been blocked");
+  }
 
   const hashedPassword = await bcrypt.hash(newPassword, 12);
 
@@ -310,7 +313,7 @@ const resetPassword = async (token, newPassword) => {
   user.resetPasswordToken = null;
   user.resetPasswordExpires = null;
 
-  await user.save();
+  await user.save({ validateBeforeSave: false });
 
   return {
     message: "Password reset successfully",

@@ -27,8 +27,8 @@ router.get("/me", protect, getMe);
 router.post("/logout", protect, logout);
 
 
-router.post("/forgot-password", forgotPasswordController);
+router.post("/forgot-password", authLimiter, forgotPasswordController);
 
-router.post("/reset-password", resetPasswordController);
+router.post("/reset-password", authLimiter, resetPasswordController);
 
 module.exports = router;

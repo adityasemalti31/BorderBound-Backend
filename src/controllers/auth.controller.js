@@ -113,7 +113,8 @@ const forgotPasswordController = async (req, res) => {
 
     const result = await forgotPassword(email);
 
-    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${result.resetToken}`;
+    const baseUrl = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "");
+    const resetLink = `${baseUrl}/reset-password?token=${result.resetToken}`;
 
     await sendEmail({
       to: result.email,
@@ -187,9 +188,10 @@ const forgotPasswordController = async (req, res) => {
 
 const resetPasswordController = async (req, res) => {
   try {
-    const { token, password } = req.body;
+    const token = req.body?.token || req.query?.token || req.params?.token;
+    const newPassword = req.body?.newPassword || req.body?.password;
 
-    const result = await resetPassword(token, password);
+    const result = await resetPassword(token, newPassword);
 
     res.status(200).json({
       success: true,
