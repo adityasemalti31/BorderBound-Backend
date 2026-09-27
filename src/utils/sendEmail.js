@@ -1,44 +1,30 @@
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 
-const transporter = nodemailer.createTransport({
-  host: "192.178.158.108",
-  port: 465,
-  secure: false,
-  requireTLS: true,
-
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-
-  tls: {
-    servername: "smtp.gmail.com",
-  },
-
-  connectionTimeout: 60000,
-  greetingTimeout: 60000,
-  socketTimeout: 60000,
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const sendEmail = async ({ to, subject, html }) => {
   try {
     console.log("Sending email...");
     console.log("TO:", to);
-    console.log("FROM:", process.env.MAIL_FROM);
+    console.log("SUBJECT:", subject);
 
-    const info = await transporter.sendMail({
+    const { data, error } = await resend.emails.send({
       from: process.env.MAIL_FROM,
       to,
       subject,
       html,
     });
 
-    console.log("SMTP response:", info.response);
-    console.log("Message ID:", info.messageId);
+    if (error) {
+      console.error("RESEND ERROR:", error);
+      throw new Error(error.message);
+    }
 
-    return info;
+    console.log("Email sent successfully:", data.id);
+
+    return data;
   } catch (error) {
-    console.error("SMTP ERROR:", error);
+    console.error("EMAIL ERROR:", error);
     throw error;
   }
 };
