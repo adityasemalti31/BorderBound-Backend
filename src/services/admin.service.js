@@ -4,6 +4,7 @@ const VoteTransaction = require("../models/voteTransaction.model");
 const SystemConfig = require("../models/systemConfig.model");
 const Payment = require("../models/payment.model");
 const { refreshLeaderboardRanks } = require("./leaderboard.service");
+const bcrypt= require("bcryptjs")
 
 // Step 6: Application Review & Approval / Rejection
 const reviewApplication = async (contestantId, { action, rejectionReason }) => {
@@ -375,6 +376,55 @@ const updateSystemConfig = async (configUpdates) => {
   return config;
 };
 
+
+
+const changeAdminPassword = async (userId, currentPassword, newPassword) => {
+  const admin = await User.findById(userId);
+
+  if (!admin) {
+    throw new Error("Admin not found");
+  }
+
+  if (admin.role !== "admin") {
+    throw new Error("Unauthorized");
+  }
+
+  if (!admin.password) {
+    throw new Error("Password is not set for this account");
+  }
+
+  const isPasswordValid = await bcrypt.compare(
+    currentPassword,
+    admin.password
+  );
+
+  if (!isPasswordValid) {
+    throw new Error("Current password is incorrect");
+  }
+
+  if (newPassword.length < 8) {
+    throw new Error("New password must be at least 8 characters");
+  }
+
+  const isSamePassword = await bcrypt.compare(
+    newPassword,
+    admin.password
+  );
+
+  if (isSamePassword) {
+    throw new Error("New password must be different from current password");
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+  admin.password = hashedPassword;
+  await admin.save();
+
+  return true;
+};
+
+
+
 module.exports = {
   reviewApplication,
   getApplications,
@@ -386,4 +436,8 @@ module.exports = {
   selectWildcards,
   certifyFinalResults,
   updateSystemConfig,
+  changeAdminPassword
 };
+
+
+

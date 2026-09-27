@@ -9,6 +9,7 @@ const {
   selectWildcards,
   certifyFinalResults,
   updateSystemConfig,
+  changeAdminPassword
 } = require("../services/admin.service");
 const VoteTransaction = require("../models/voteTransaction.model");
 
@@ -167,6 +168,52 @@ const handleUpdateConfig = async (req, res, next) => {
   }
 };
 
+
+
+
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "All password fields are required",
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password and confirm password do not match",
+      });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 8 characters",
+      });
+    }
+
+    await changeAdminPassword(
+      req.user.id,
+      currentPassword,
+      newPassword
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Password changed successfully",
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 module.exports = {
   handleReviewApplication,
   fetchApplications,
@@ -178,4 +225,5 @@ module.exports = {
   handleSelectWildcards,
   handleCertifyResults,
   handleUpdateConfig,
+  changePassword
 };

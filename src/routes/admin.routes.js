@@ -11,6 +11,7 @@ const {
   handleSelectWildcards,
   handleCertifyResults,
   handleUpdateConfig,
+  changePassword
 } = require("../controllers/admin.controller");
 const { protect, requireAdmin } = require("../middleware/auth.middleware");
 
@@ -31,5 +32,6 @@ router.post("/select-wildcards", handleSelectWildcards);
 router.post("/certify-results", handleCertifyResults);
 
 router.put("/config", handleUpdateConfig);
+router.put("/change-password", changePassword);
 
 module.exports = router;
