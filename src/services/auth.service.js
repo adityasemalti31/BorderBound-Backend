@@ -4,7 +4,6 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/user.model");
 const crypto = require("crypto");
 
-
 const { getAuth } = require("firebase-admin/auth");
 const firebaseApp = require("../config/firebase");
 
@@ -44,6 +43,32 @@ const registerUser = async (data) => {
     !password
   ) {
     throw new Error("All fields are required");
+  }
+
+  // Minimum age validation: 16 years
+  const birthDate = new Date(dob);
+  const today = new Date();
+
+  if (isNaN(birthDate.getTime())) {
+    throw new Error("Invalid date of birth");
+  }
+
+  let age = today.getFullYear() - birthDate.getFullYear();
+
+  const monthDifference = today.getMonth() - birthDate.getMonth();
+
+  if (
+    monthDifference < 0 ||
+    (monthDifference === 0 &&
+      today.getDate() < birthDate.getDate())
+  ) {
+    age--;
+  }
+
+  if (age < 16) {
+    throw new Error(
+      "You must be at least 16 years old to register"
+    );
   }
 
   const normalizedEmail = email.toLowerCase().trim();
@@ -116,7 +141,10 @@ const loginUser = async (email, password) => {
     throw new Error("This account uses Google login");
   }
 
-  const isPasswordValid = await bcrypt.compare(password, user.password);
+  const isPasswordValid = await bcrypt.compare(
+    password,
+    user.password
+  );
 
   if (!isPasswordValid) {
     throw new Error("Invalid email or password");
@@ -259,7 +287,9 @@ const forgotPassword = async (email) => {
     .digest("hex");
 
   user.resetPasswordToken = hashedToken;
-  user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000);
+  user.resetPasswordExpires = new Date(
+    Date.now() + 15 * 60 * 1000
+  );
 
   await user.save({ validateBeforeSave: false });
 
@@ -279,7 +309,10 @@ const resetPassword = async (token, newPassword) => {
     throw new Error("New password is required");
   }
 
-  if (typeof newPassword !== "string" || newPassword.length < 8) {
+  if (
+    typeof newPassword !== "string" ||
+    newPassword.length < 8
+  ) {
     throw new Error("Password must be at least 8 characters");
   }
 
@@ -325,5 +358,5 @@ module.exports = {
   loginUser,
   googleLogin,
   forgotPassword,
-  resetPassword
+  resetPassword,
 };
