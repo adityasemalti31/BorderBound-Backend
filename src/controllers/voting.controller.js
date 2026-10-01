@@ -1,103 +1,293 @@
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
+
+const FRONTEND_URL =
+  process.env.FRONTEND_URL 
+
 const {
   getVotingPackages,
   createVoteOrder,
   verifyVotePayment,
 } = require("../services/voting.service");
 
-const fetchVotingPackages = async (req, res, next) => {
+const getClientIp = (req) => {
+  return (
+    req.ip ||
+    req.headers["x-forwarded-for"] ||
+    "0.0.0.0"
+  );
+};
+
+const isPayURedirectRequest = (req) => {
+  const accept =
+    req.headers.accept || "";
+
+  const contentType =
+    req.headers["content-type"] || "";
+
+  return (
+    accept.includes("text/html") ||
+    contentType.includes(
+      "application/x-www-form-urlencoded"
+    )
+  );
+};
+
+const getContestantRedirectPath = (
+  contestantId
+) => {
+  return contestantId
+    ? `/contestant/${encodeURIComponent(
+        contestantId
+      )}`
+    : "/leaderboard";
+};
+
+const fetchVotingPackages = async (
+  req,
+  res
+) => {
   try {
     const data = await getVotingPackages();
-    res.status(200).json({
+
+    return res.status(200).json({
       success: true,
       data,
     });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    console.error(
+      "Fetch voting packages error:",
+      error
+    );
+
+    return res.status(400).json({
+      success: false,
+      message:
+        error.message ||
+        "Unable to fetch voting packages.",
+    });
   }
 };
 
-const initiateVoteOrder = async (req, res, next) => {
+const initiateVoteOrder = async (
+  req,
+  res
+) => {
   try {
-    const { contestantId, votesCount } = req.body;
-    const ipAddress = req.ip || req.headers["x-forwarded-for"] || "";
-    const userAgent = req.headers["user-agent"] || "";
-    const voterUserId = req.user ? req.user._id : null;
-
-    const orderData = await createVoteOrder({
+    const {
       contestantId,
-      votesCount: Number(votesCount),
-      voterUserId,
-      ipAddress,
-      userAgent,
-    });
+      votesCount,
+    } = req.body || {};
 
-    res.status(200).json({
+    const ipAddress =
+      getClientIp(req);
+
+    const userAgent =
+      req.headers["user-agent"] || "";
+
+    const voterUserId =
+      req.user?._id || null;
+
+    const orderData =
+      await createVoteOrder({
+        contestantId,
+        votesCount: Number(votesCount),
+        voterUserId,
+        ipAddress,
+        userAgent,
+      });
+
+    return res.status(200).json({
       success: true,
-      message: "Vote payment order created successfully.",
+      message:
+        "Vote payment order created successfully.",
       data: orderData,
     });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
-  }
-};
+    console.error(
+      "Initiate vote order error:",
+      error
+    );
 
-const confirmVotePayment = async (req, res, next) => {
-  try {
-    const voterIp = req.ip || req.headers["x-forwarded-for"] || "0.0.0.0";
-
-    const result = await verifyVotePayment({
-      ...req.body,
-      voterIp,
+    return res.status(400).json({
+      success: false,
+      message:
+        error.message ||
+        "Unable to create vote payment order.",
     });
-
-    res.status(200).json(result);
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
   }
 };
 
-const handlePayUVotingSuccess = async (req, res, next) => {
+const confirmVotePayment = async (
+  req,
+  res
+) => {
   try {
-    const voterIp = req.ip || req.headers["x-forwarded-for"] || "0.0.0.0";
-    const result = await verifyVotePayment({
-      ...req.body,
-      voterIp,
+    const voterIp =
+      getClientIp(req);
+
+    const result =
+      await verifyVotePayment({
+        ...(req.body || {}),
+        voterIp,
+      });
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error(
+      "Confirm vote payment error:",
+      error
+    );
+
+    return res.status(400).json({
+      success: false,
+      message:
+        error.message ||
+        "Payment verification failed.",
     });
-
-    const contestantId = req.body.udf3 || "";
-    const votesCount = req.body.udf4 || "";
-
-    if (req.headers.accept?.includes("text/html") || req.headers["content-type"]?.includes("application/x-www-form-urlencoded")) {
-      const redirectPath = contestantId ? `/contestant/${contestantId}` : "/leaderboard";
-      return res.redirect(`${FRONTEND_URL}${redirectPath}?voting=success&votes=${votesCount}&txnid=${req.body.txnid || ""}`);
-    }
-
-    res.status(200).json(result);
-  } catch (error) {
-    console.error("PayU voting success callback error:", error);
-
-    const contestantId = req.body.udf3 || "";
-    if (req.headers.accept?.includes("text/html") || req.headers["content-type"]?.includes("application/x-www-form-urlencoded")) {
-      const redirectPath = contestantId ? `/contestant/${contestantId}` : "/leaderboard";
-      return res.redirect(`${FRONTEND_URL}${redirectPath}?voting=failed&reason=${encodeURIComponent(error.message)}`);
-    }
-
-    res.status(400).json({ success: false, message: error.message });
   }
 };
 
-const handlePayUVotingFailure = async (req, res, next) => {
+const handlePayUVotingSuccess = async (
+  req,
+  res
+) => {
+  const body = req.body || {};
+
   try {
-    const contestantId = req.body.udf3 || "";
-    if (req.headers.accept?.includes("text/html") || req.headers["content-type"]?.includes("application/x-www-form-urlencoded")) {
-      const redirectPath = contestantId ? `/contestant/${contestantId}` : "/leaderboard";
-      return res.redirect(`${FRONTEND_URL}${redirectPath}?voting=failed&reason=Payment%20cancelled%20or%20failed`);
+    const voterIp =
+      getClientIp(req);
+
+    const result =
+      await verifyVotePayment({
+        ...body,
+        voterIp,
+      });
+
+    const contestantId =
+      body.udf3 || "";
+
+    const votesCount =
+      body.udf4 || "";
+
+    if (
+      isPayURedirectRequest(req)
+    ) {
+      const redirectPath =
+        getContestantRedirectPath(
+          contestantId
+        );
+
+      const params =
+        new URLSearchParams({
+          voting: "success",
+          ...(votesCount
+            ? {
+                votes: String(
+                  votesCount
+                ),
+              }
+            : {}),
+          ...(body.txnid
+            ? {
+                txnid: String(
+                  body.txnid
+                ),
+              }
+            : {}),
+        });
+
+      return res.redirect(
+        `${FRONTEND_URL}${redirectPath}?${params.toString()}`
+      );
     }
 
-    res.status(400).json({ success: false, message: "PayU voting payment failed." });
+    return res.status(200).json(
+      result
+    );
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    console.error(
+      "PayU voting success callback error:",
+      error
+    );
+
+    const contestantId =
+      body.udf3 || "";
+
+    if (
+      isPayURedirectRequest(req)
+    ) {
+      const redirectPath =
+        getContestantRedirectPath(
+          contestantId
+        );
+
+      /*
+       * Do NOT expose internal error.message
+       * in the redirect URL.
+       */
+      return res.redirect(
+        `${FRONTEND_URL}${redirectPath}?voting=failed&reason=Payment%20verification%20failed`
+      );
+    }
+
+    return res.status(400).json({
+      success: false,
+      message:
+        error.message ||
+        "Payment verification failed.",
+    });
+  }
+};
+
+const handlePayUVotingFailure = async (
+  req,
+  res
+) => {
+  const body = req.body || {};
+
+  try {
+    /*
+     * PayU failure callback itself does not allocate votes.
+     *
+     * If you want complete failure records, payment.service /
+     * a dedicated failure handler should persist the callback.
+     *
+     * We intentionally do not call verifyVotePayment here
+     * because a failed PayU callback is not a successful
+     * financial settlement.
+     */
+
+    const contestantId =
+      body.udf3 || "";
+
+    if (
+      isPayURedirectRequest(req)
+    ) {
+      const redirectPath =
+        getContestantRedirectPath(
+          contestantId
+        );
+
+      return res.redirect(
+        `${FRONTEND_URL}${redirectPath}?voting=failed&reason=Payment%20cancelled%20or%20failed`
+      );
+    }
+
+    return res.status(400).json({
+      success: false,
+      message:
+        "PayU voting payment failed.",
+    });
+  } catch (error) {
+    console.error(
+      "PayU voting failure callback error:",
+      error
+    );
+
+    return res.status(400).json({
+      success: false,
+      message:
+        "PayU voting payment failed.",
+    });
   }
 };
 
@@ -108,4 +298,3 @@ module.exports = {
   handlePayUVotingSuccess,
   handlePayUVotingFailure,
 };
-

@@ -1,3 +1,4 @@
+
 const mongoose = require("mongoose");
 
 const paymentSchema = new mongoose.Schema(
@@ -6,12 +7,14 @@ const paymentSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: false,
+      index: true,
     },
 
     contestantId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "ContestantProfile",
       required: true,
+      index: true,
     },
 
     txnid: {
@@ -19,28 +22,35 @@ const paymentSchema = new mongoose.Schema(
       required: true,
       unique: true,
       index: true,
+      trim: true,
+      maxlength: 100,
     },
 
     mihpayid: {
       type: String,
       default: null,
       index: true,
+      trim: true,
+      maxlength: 100,
     },
 
     amount: {
       type: Number,
       required: true,
+      min: 0,
     },
 
     votesGenerated: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     type: {
       type: String,
       enum: ["registration", "voting"],
       default: "registration",
+      index: true,
     },
 
     status: {
@@ -59,11 +69,15 @@ const paymentSchema = new mongoose.Schema(
     paymentMode: {
       type: String,
       default: null,
+      trim: true,
+      maxlength: 100,
     },
 
     bankReferenceNumber: {
       type: String,
       default: null,
+      trim: true,
+      maxlength: 150,
     },
 
     rawResponse: {
@@ -74,11 +88,15 @@ const paymentSchema = new mongoose.Schema(
     ipAddress: {
       type: String,
       default: null,
+      trim: true,
+      maxlength: 100,
     },
 
     userAgent: {
       type: String,
       default: null,
+      trim: true,
+      maxlength: 1000,
     },
   },
   {
@@ -86,4 +104,20 @@ const paymentSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model("Payment", paymentSchema);
+// Useful for payment history / admin queries
+paymentSchema.index({
+  contestantId: 1,
+  status: 1,
+  type: 1,
+});
+
+paymentSchema.index({
+  userId: 1,
+  status: 1,
+  type: 1,
+});
+
+module.exports = mongoose.model(
+  "Payment",
+  paymentSchema
+);

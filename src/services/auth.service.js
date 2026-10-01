@@ -1,8 +1,9 @@
-
+const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const User = require("../models/user.model");
 const crypto = require("crypto");
+
+const User = require("../models/user.model");
 
 const { getAuth } = require("firebase-admin/auth");
 const firebaseApp = require("../config/firebase");
@@ -19,6 +20,59 @@ const generateToken = (user) => {
     }
   );
 };
+
+const normalizeEmail = (email) => {
+  if (typeof email !== "string") return null;
+  return email.trim().toLowerCase();
+};
+
+const validatePassword = (password) => {
+  if (
+    typeof password !== "string" ||
+    password.length < 8
+  ) {
+    throw new Error("Password must be at least 8 characters");
+  }
+};
+
+const calculateAge = (dob) => {
+  const birthDate = new Date(dob);
+
+  if (Number.isNaN(birthDate.getTime())) {
+    throw new Error("Invalid date of birth");
+  }
+
+  const today = new Date();
+
+  let age =
+    today.getFullYear() -
+    birthDate.getFullYear();
+
+  const monthDifference =
+    today.getMonth() -
+    birthDate.getMonth();
+
+  if (
+    monthDifference < 0 ||
+    (
+      monthDifference === 0 &&
+      today.getDate() < birthDate.getDate()
+    )
+  ) {
+    age--;
+  }
+
+  return age;
+};
+
+const getPublicUser = (user) => ({
+  id: user._id,
+  fullName: user.fullName,
+  email: user.email,
+  mobile: user.mobile,
+  role: user.role,
+  authProvider: user.authProvider,
+});
 
 const registerUser = async (data) => {
   const {
@@ -45,25 +99,15 @@ const registerUser = async (data) => {
     throw new Error("All fields are required");
   }
 
-  // Minimum age validation: 16 years
-  const birthDate = new Date(dob);
-  const today = new Date();
+  validatePassword(password);
 
-  if (isNaN(birthDate.getTime())) {
-    throw new Error("Invalid date of birth");
+  const normalizedEmail = normalizeEmail(email);
+
+  if (!normalizedEmail) {
+    throw new Error("Invalid email");
   }
 
-  let age = today.getFullYear() - birthDate.getFullYear();
-
-  const monthDifference = today.getMonth() - birthDate.getMonth();
-
-  if (
-    monthDifference < 0 ||
-    (monthDifference === 0 &&
-      today.getDate() < birthDate.getDate())
-  ) {
-    age--;
-  }
+  const age = calculateAge(dob);
 
   if (age < 16) {
     throw new Error(
@@ -71,11 +115,12 @@ const registerUser = async (data) => {
     );
   }
 
-  const normalizedEmail = email.toLowerCase().trim();
-
   const existingUser = await User.findOne({
-    $or: [{ email: normalizedEmail }, { mobile }],
-  });
+    $or: [
+      { email: normalizedEmail },
+      { mobile },
+    ],
+  }).select("email mobile");
 
   if (existingUser) {
     if (existingUser.email === normalizedEmail) {
@@ -87,43 +132,60 @@ const registerUser = async (data) => {
     }
   }
 
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const hashedPassword = await bcrypt.hash(
+    password,
+    10
+  );
 
-  const user = await User.create({
-    fullName,
-    mobile,
-    email: normalizedEmail,
-    dob,
-    gender,
-    city,
-    state,
-    password: hashedPassword,
-    authProvider: "local",
-    role: "user",
-    status: "active",
-  });
+  try {
+    const user = await User.create({
+      fullName: fullName.trim(),
+      mobile: mobile.trim(),
+      email: normalizedEmail,
+      dob,
+      gender,
+      city: city.trim(),
+      state: state.trim(),
+      password: hashedPassword,
+      authProvider: "local",
+      role: "user",
+      status: "active",
+    });
 
-  const token = generateToken(user);
+    const token = generateToken(user);
 
-  return {
-    user: {
-      id: user._id,
-      fullName: user.fullName,
-      email: user.email,
-      mobile: user.mobile,
-      role: user.role,
-      authProvider: user.authProvider,
-    },
-    token,
-  };
+    return {
+      user: getPublicUser(user),
+      token,
+    };
+  } catch (error) {
+    if (error?.code === 11000) {
+      if (error.keyPattern?.email) {
+        throw new Error("Email already registered");
+      }
+
+      if (error.keyPattern?.mobile) {
+        throw new Error("Mobile number already registered");
+      }
+
+      throw new Error("Account already exists");
+    }
+
+    throw error;
+  }
 };
 
 const loginUser = async (email, password) => {
-  if (!email || !password) {
+  if (
+    typeof email !== "string" ||
+    typeof password !== "string" ||
+    !email.trim() ||
+    !password
+  ) {
     throw new Error("Email and password are required");
   }
 
-  const normalizedEmail = email.toLowerCase().trim();
+  const normalizedEmail = normalizeEmail(email);
 
   const user = await User.findOne({
     email: normalizedEmail,
@@ -137,7 +199,10 @@ const loginUser = async (email, password) => {
     throw new Error("Your account has been blocked");
   }
 
-  if (user.authProvider === "google" && !user.password) {
+  if (
+    user.authProvider === "google" &&
+    !user.password
+  ) {
     throw new Error("This account uses Google login");
   }
 
@@ -153,30 +218,37 @@ const loginUser = async (email, password) => {
   const token = generateToken(user);
 
   return {
-    user: {
-      id: user._id,
-      fullName: user.fullName,
-      email: user.email,
-      mobile: user.mobile,
-      role: user.role,
-      authProvider: user.authProvider,
-    },
+    user: getPublicUser(user),
     token,
   };
 };
 
 const googleLogin = async (idToken) => {
-  if (!idToken) {
-    throw new Error("Google ID token is required");
+  if (
+    typeof idToken !== "string" ||
+    !idToken.trim()
+  ) {
+    throw new Error(
+      "Google ID token is required"
+    );
   }
 
   let decodedToken;
 
   try {
-    decodedToken = await getAuth(firebaseApp).verifyIdToken(idToken);
+    decodedToken =
+      await getAuth(firebaseApp).verifyIdToken(
+        idToken
+      );
   } catch (error) {
-    console.error("Firebase token verification error:", error);
-    throw new Error("Invalid Google authentication token");
+    console.error(
+      "Firebase token verification error:",
+      error
+    );
+
+    throw new Error(
+      "Invalid Google authentication token"
+    );
   }
 
   const {
@@ -188,14 +260,19 @@ const googleLogin = async (idToken) => {
   } = decodedToken;
 
   if (!email) {
-    throw new Error("Google account email is required");
+    throw new Error(
+      "Google account email is required"
+    );
   }
 
   if (!email_verified) {
-    throw new Error("Google email is not verified");
+    throw new Error(
+      "Google email is not verified"
+    );
   }
 
-  const normalizedEmail = email.toLowerCase().trim();
+  const normalizedEmail =
+    normalizeEmail(email);
 
   let user = await User.findOne({
     $or: [
@@ -206,47 +283,79 @@ const googleLogin = async (idToken) => {
 
   if (user) {
     if (user.status === "blocked") {
-      throw new Error("Your account has been blocked");
+      throw new Error(
+        "Your account has been blocked"
+      );
     }
 
-    user.firebaseUid = uid;
+    let shouldSave = false;
 
-    if (!user.authProvider) {
+    if (user.firebaseUid !== uid) {
+      user.firebaseUid = uid;
+      shouldSave = true;
+    }
+
+    if (
+      user.authProvider !== "google" &&
+      !user.password
+    ) {
       user.authProvider = "google";
+      shouldSave = true;
     }
 
     if (!user.fullName && name) {
       user.fullName = name;
+      shouldSave = true;
     }
 
-    await user.save();
+    if (shouldSave) {
+      await user.save();
+    }
   } else {
-    user = await User.create({
-      fullName: name || "Google User",
-      email: normalizedEmail,
-      firebaseUid: uid,
-      authProvider: "google",
-      password: null,
-      mobile: null,
-      dob: null,
-      gender: null,
-      city: null,
-      state: null,
-      role: "user",
-      status: "active",
-    });
+    try {
+      user = await User.create({
+        fullName: name || "Google User",
+        email: normalizedEmail,
+        firebaseUid: uid,
+        authProvider: "google",
+        password: null,
+        mobile: null,
+        dob: null,
+        gender: null,
+        city: null,
+        state: null,
+        role: "user",
+        status: "active",
+      });
+    } catch (error) {
+      if (error?.code === 11000) {
+        user = await User.findOne({
+          $or: [
+            { firebaseUid: uid },
+            { email: normalizedEmail },
+          ],
+        });
+
+        if (!user) {
+          throw error;
+        }
+
+        if (user.status === "blocked") {
+          throw new Error(
+            "Your account has been blocked"
+          );
+        }
+      } else {
+        throw error;
+      }
+    }
   }
 
   const token = generateToken(user);
 
   return {
     user: {
-      id: user._id,
-      fullName: user.fullName,
-      email: user.email,
-      mobile: user.mobile,
-      role: user.role,
-      authProvider: user.authProvider,
+      ...getPublicUser(user),
       profileImage: picture || null,
       profileCompleted: Boolean(
         user.mobile &&
@@ -261,25 +370,42 @@ const googleLogin = async (idToken) => {
 };
 
 const forgotPassword = async (email) => {
-  if (!email || typeof email !== "string") {
+  if (
+    typeof email !== "string" ||
+    !email.trim()
+  ) {
     throw new Error("Email is required");
   }
 
-  const normalizedEmail = email.toLowerCase().trim();
+  const normalizedEmail =
+    normalizeEmail(email);
 
   const user = await User.findOne({
     email: normalizedEmail,
-  });
+  }).select(
+    "email fullName status"
+  );
 
+  // Controller can always return the same public
+  // success message to prevent account enumeration.
   if (!user) {
-    throw new Error("No account found with this email");
+    return {
+      resetToken: null,
+      email: null,
+      fullName: null,
+    };
   }
 
   if (user.status === "blocked") {
-    throw new Error("Your account has been blocked");
+    return {
+      resetToken: null,
+      email: null,
+      fullName: null,
+    };
   }
 
-  const resetToken = crypto.randomBytes(32).toString("hex");
+  const resetToken =
+    crypto.randomBytes(32).toString("hex");
 
   const hashedToken = crypto
     .createHash("sha256")
@@ -291,7 +417,9 @@ const forgotPassword = async (email) => {
     Date.now() + 15 * 60 * 1000
   );
 
-  await user.save({ validateBeforeSave: false });
+  await user.save({
+    validateBeforeSave: false,
+  });
 
   return {
     resetToken,
@@ -300,23 +428,22 @@ const forgotPassword = async (email) => {
   };
 };
 
-const resetPassword = async (token, newPassword) => {
-  if (!token) {
-    throw new Error("Reset token is required");
-  }
-
-  if (!newPassword) {
-    throw new Error("New password is required");
-  }
-
+const resetPassword = async (
+  token,
+  newPassword
+) => {
   if (
-    typeof newPassword !== "string" ||
-    newPassword.length < 8
+    typeof token !== "string" ||
+    !token.trim()
   ) {
-    throw new Error("Password must be at least 8 characters");
+    throw new Error(
+      "Reset token is required"
+    );
   }
 
-  const cleanToken = String(token).trim();
+  validatePassword(newPassword);
+
+  const cleanToken = token.trim();
 
   const hashedToken = crypto
     .createHash("sha256")
@@ -331,22 +458,28 @@ const resetPassword = async (token, newPassword) => {
   });
 
   if (!user) {
-    throw new Error("Invalid or expired reset link");
+    throw new Error(
+      "Invalid or expired reset link"
+    );
   }
 
   if (user.status === "blocked") {
-    throw new Error("Your account has been blocked");
+    throw new Error(
+      "Your account has been blocked"
+    );
   }
 
-  const hashedPassword = await bcrypt.hash(newPassword, 12);
+  const hashedPassword =
+    await bcrypt.hash(newPassword, 12);
 
   user.password = hashedPassword;
   user.authProvider = "local";
-
   user.resetPasswordToken = null;
   user.resetPasswordExpires = null;
 
-  await user.save({ validateBeforeSave: false });
+  await user.save({
+    validateBeforeSave: false,
+  });
 
   return {
     message: "Password reset successfully",
