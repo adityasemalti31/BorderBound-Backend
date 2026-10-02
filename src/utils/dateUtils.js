@@ -135,7 +135,7 @@
  * Utility for BorderBound competition phase and fee calculations.
  */
 
-// Registration Phase 1: 16 Sept - 19 Oct (₹499)
+// Registration Phase 1: 5 Oct - 19 Oct (₹499)
 // Registration Phase 2: 20 Oct - 5 Nov (₹1,499)
 // Voting Period: 15 Oct - 15 Nov
 
@@ -162,7 +162,8 @@ const getRegistrationFeeInfo = (currentDate = new Date(), config = null) => {
   const year = currentDate.getFullYear();
 
   // Default registration dates
-  const phase1Start = new Date(year, 8, 16, 0, 0, 0); // 16 September
+  // const phase1Start = new Date(year, 8, 16, 0, 0, 0); // 16 September
+  const phase1Start = new Date(year, 9, 5, 0, 0, 0); // 5 October
   const phase2Start = new Date(year, 9, 20, 0, 0, 0); // 20 October
   const regEnd = new Date(year, 10, 5, 23, 59, 59); // 5 November
 
@@ -223,8 +224,8 @@ const getVotingStatusInfo = (currentDate = new Date(), config = null) => {
 
   const year = currentDate.getFullYear();
 
-  // const votingStart = new Date(year, 9, 15, 0, 0, 0); // 15 October
-  const votingStart = new Date(year, 8, 22, 0, 0, 0); // 22 September
+  const votingStart = new Date(year, 9, 15, 0, 0, 0); // 15 October
+  // const votingStart = new Date(year, 8, 22, 0, 0, 0); // 22 September
   const votingEnd = new Date(year, 10, 15, 23, 59, 59); // 15 November
 
   if (currentDate < votingStart) {
