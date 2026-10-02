@@ -1,11 +1,11 @@
 const rateLimit = require("express-rate-limit");
 
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20, // max 20 requests per windowMs per IP
+  windowMs: 1000,
+  max: 5,
   message: {
     success: false,
-    message: "Too many authentication requests. Please try again after 15 minutes.",
+    message: "Too many authentication requests. Please slow down.",
   },
   standardHeaders: true,
   legacyHeaders: false,
