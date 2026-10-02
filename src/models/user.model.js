@@ -12,6 +12,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true,
+      index: true,
       trim: true,
       default: null,
     },
@@ -20,6 +21,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
+      index: true,
       lowercase: true,
       trim: true,
     },
@@ -62,6 +64,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true,
+      index: true,
     },
 
     role: {
@@ -81,9 +84,11 @@ const userSchema = new mongoose.Schema(
       enum: ["active", "blocked"],
       default: "active",
     },
+
     resetPasswordToken: {
       type: String,
       default: null,
+      index: true,
     },
 
     resetPasswordExpires: {
@@ -93,7 +98,7 @@ const userSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  },
+  }
 );
 
 module.exports = mongoose.model("User", userSchema);
