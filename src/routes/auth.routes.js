@@ -16,7 +16,7 @@ const {
 const { protect } = require("../middleware/auth.middleware");
 const { authLimiter } = require("../middleware/rateLimiter.middleware");
 
-router.post("/register", register);
+router.post("/register",authLimiter, register);
 
 router.post("/login", authLimiter, login);
 
