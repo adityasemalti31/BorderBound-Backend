@@ -119,6 +119,25 @@ const contestantProfileSchema = new mongoose.Schema(
     },
     isWildCardSelected: { type: Boolean, default: false },
     certifiedAt: { type: Date, default: null },
+    registrationStartedAt: {
+      type: Date,
+      default: null,
+    },
+
+    registrationConfirmationEmailSent: {
+      type: Boolean,
+      default: false,
+    },
+
+    paymentReminderSent: {
+      type: Boolean,
+      default: false,
+    },
+
+    paymentReminderSentAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

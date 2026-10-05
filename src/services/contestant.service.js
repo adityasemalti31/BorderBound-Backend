@@ -5,6 +5,62 @@ const Payment = require("../models/payment.model");
 const { getRegistrationFeeInfo } = require("../utils/dateUtils");
 const { createPayment, verifyPayUResponseHash } = require("./payment.service");
 const { uploadFile } = require("./upload.service");
+const {
+  sendCandidateRegistrationSuccessEmail,
+} = require("../utils/candidateEmails");
+
+
+
+
+const sendPendingPaymentReminders = async () => {
+  const {
+    sendCandidatePaymentReminderEmail,
+  } = require("../utils/candidateEmails");
+
+  const twoDaysAgo = new Date(
+    Date.now() - 48 * 60 * 60 * 1000
+  );
+
+  const candidates = await ContestantProfile.find({
+    status: "pending_payment",
+    registrationFeePaid: false,
+    paymentReminderSent: false,
+    registrationStartedAt: {
+      $lte: twoDaysAgo,
+    },
+  });
+
+  console.log(
+    `Found ${candidates.length} pending payment reminders.`
+  );
+
+  for (const profile of candidates) {
+    try {
+      await sendCandidatePaymentReminderEmail({
+        to: profile.email,
+        fullName: profile.fullName,
+        applicationId: profile.applicationId,
+        paymentUrl: `${process.env.FRONTEND_URL}/register`,
+      });
+
+      profile.paymentReminderSent = true;
+      profile.paymentReminderSentAt = new Date();
+
+      await profile.save();
+
+      console.log(
+        `Payment reminder sent to ${profile.email}`
+      );
+    } catch (error) {
+      console.error(
+        `Payment reminder failed for ${profile.email}:`,
+        error.message
+      );
+    }
+  }
+
+  return candidates.length;
+};
 
 // Helper to generate unique Application ID: BB-2026-XXXXX
 const generateApplicationId = async () => {
@@ -28,9 +84,7 @@ const createOrUpdateProfile = async (userId, profileData) => {
   const feeInfo = getRegistrationFeeInfo(new Date(), config);
 
   if (feeInfo.isClosed) {
-    throw new Error(
-      feeInfo.reason || "Registration is currently closed."
-    );
+    throw new Error(feeInfo.reason || "Registration is currently closed.");
   }
 
   const user = await User.findById(userId);
@@ -57,15 +111,9 @@ const createOrUpdateProfile = async (userId, profileData) => {
     bio,
   } = profileData;
 
-  if (
-    !dob ||
-    !gender ||
-    !mobile ||
-    !city ||
-    !state
-  ) {
+  if (!dob || !gender || !mobile || !city || !state) {
     throw new Error(
-      "Date of birth, gender, mobile, city and state are required."
+      "Date of birth, gender, mobile, city and state are required.",
     );
   }
 
@@ -76,7 +124,7 @@ const createOrUpdateProfile = async (userId, profileData) => {
     !emergencyContact.phone
   ) {
     throw new Error(
-      "Permanent address and Emergency contact details are required."
+      "Permanent address and Emergency contact details are required.",
     );
   }
 
@@ -87,8 +135,7 @@ const createOrUpdateProfile = async (userId, profileData) => {
   }
 
   const age = Math.floor(
-    (new Date() - parsedDob) /
-      (365.25 * 24 * 60 * 60 * 1000)
+    (new Date() - parsedDob) / (365.25 * 24 * 60 * 60 * 1000),
   );
 
   if (age < 16) {
@@ -103,11 +150,9 @@ const createOrUpdateProfile = async (userId, profileData) => {
       .replace(/^-+|-+$/g, "");
   };
 
-  const finalFullName =
-    fullName?.trim() || user.fullName;
+  const finalFullName = fullName?.trim() || user.fullName;
 
-  const finalEmail =
-    email?.toLowerCase().trim() || user.email;
+  const finalEmail = email?.toLowerCase().trim() || user.email;
 
   if (!finalFullName) {
     throw new Error("Full name is required.");
@@ -119,9 +164,7 @@ const createOrUpdateProfile = async (userId, profileData) => {
 
   if (profile) {
     if (profile.status === "approved") {
-      throw new Error(
-        "Approved contestant profile cannot be edited directly."
-      );
+      throw new Error("Approved contestant profile cannot be edited directly.");
     }
 
     profile.fullName = finalFullName;
@@ -181,6 +224,7 @@ const createOrUpdateProfile = async (userId, profileData) => {
       emergencyContact,
 
       status: "draft",
+      registrationStartedAt: new Date(),
     });
 
     user.contestantProfile = profile._id;
@@ -389,15 +433,12 @@ const verifyRegistrationFee = async (userId, paymentData) => {
   payment.status = "success";
   payment.mihpayid = mihpayid || null;
   payment.paymentMode = paymentData.mode || null;
-  payment.bankReferenceNumber =
-    paymentData.bank_ref_num || null;
+  payment.bankReferenceNumber = paymentData.bank_ref_num || null;
   payment.rawResponse = paymentData;
 
   await payment.save();
 
-  const profile = await ContestantProfile.findById(
-    payment.contestantId
-  );
+  const profile = await ContestantProfile.findById(payment.contestantId);
 
   if (!profile) {
     throw new Error("Contestant profile not found.");
@@ -406,6 +447,20 @@ const verifyRegistrationFee = async (userId, paymentData) => {
   profile.registrationFeePaid = true;
   profile.registrationPaymentId = payment._id;
   profile.status = "pending_review";
+
+  if (!profile.registrationConfirmationEmailSent) {
+    try {
+      await sendCandidateRegistrationSuccessEmail({
+        to: profile.email,
+        fullName: profile.fullName,
+        applicationId: profile.applicationId,
+      });
+
+      profile.registrationConfirmationEmailSent = true;
+    } catch (emailError) {
+      console.error("Candidate registration email failed:", emailError.message);
+    }
+  }
 
   await profile.save();
 
@@ -498,4 +553,5 @@ module.exports = {
   getMyProfile,
   getPublicContestants,
   getPublicContestantById,
+  sendPendingPaymentReminders
 };
