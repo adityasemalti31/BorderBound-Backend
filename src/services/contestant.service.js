@@ -91,7 +91,7 @@ const createOrUpdateProfile = async (userId, profileData) => {
       (365.25 * 24 * 60 * 60 * 1000)
   );
 
-  if (age < 18) {
+  if (age < 16) {
     throw new Error("Contestant must be at least 18 years old.");
   }
 
