@@ -164,8 +164,8 @@ const getRegistrationFeeInfo = (currentDate = new Date(), config = null) => {
   // Default registration dates
   // const phase1Start = new Date(year, 8, 16, 0, 0, 0); // 16 September
   const phase1Start = new Date(year, 9, 5, 0, 0, 0); // 5 October
-  const phase2Start = new Date(year, 9, 20, 0, 0, 0); // 20 October
-  const regEnd = new Date(year, 10, 5, 23, 59, 59); // 5 November
+ const phase2Start = new Date(year, 9, 31, 0, 0, 0); // 31 October
+ const regEnd = new Date(year, 10, 15, 23, 59, 59); // 15 November
 
   if (currentDate < phase1Start) {
     return {
@@ -181,7 +181,7 @@ const getRegistrationFeeInfo = (currentDate = new Date(), config = null) => {
   if (currentDate > regEnd) {
     return {
       isClosed: true,
-      reason: "Registration officially closed on 5 November",
+      reason: "Registration officially closed on 15 November",
       amount: 0,
       closedAt: regEnd,
     };
@@ -191,7 +191,7 @@ const getRegistrationFeeInfo = (currentDate = new Date(), config = null) => {
     return {
       isClosed: false,
       phase: "PHASE_1",
-      phaseName: "Early Bird Registration (16 Sept – 19 Oct)",
+      phaseName: "Early Bird Registration (5 Oct – 30 Oct)",
       amount: config?.regFeePhase1 || 499,
       nextPhaseAt: phase2Start,
       nextAmount: config?.regFeePhase2 || 1499,
@@ -201,7 +201,7 @@ const getRegistrationFeeInfo = (currentDate = new Date(), config = null) => {
   return {
     isClosed: false,
     phase: "PHASE_2",
-    phaseName: "Standard Registration (20 Oct – 5 Nov)",
+    phaseName: "Standard Registration (31 Oct – 15 Nov)",
     amount: config?.regFeePhase2 || 1499,
     closesAt: regEnd,
   };
@@ -226,7 +226,7 @@ const getVotingStatusInfo = (currentDate = new Date(), config = null) => {
 
   const votingStart = new Date(year, 9, 15, 0, 0, 0); // 15 October
   // const votingStart = new Date(year, 8, 22, 0, 0, 0); // 22 September
-  const votingEnd = new Date(year, 10, 15, 23, 59, 59); // 15 November
+  const votingEnd = new Date(year, 10, 20, 23, 59, 59); // 20 November
 
   if (currentDate < votingStart) {
     return {
