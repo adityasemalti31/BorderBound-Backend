@@ -377,21 +377,110 @@ const initiateRegistrationFee = async (userId, ipAddress, userAgent) => {
 };
 
 // Step 5 Verification: Confirm Registration Fee Payment
+// const verifyRegistrationFee = async (userId, paymentData) => {
+//   const {
+//     txnid,
+//     mihpayid,
+//     status,
+//     hash,
+//     amount,
+//     productinfo,
+//     firstname,
+//     email,
+//     udf1,
+//     udf2,
+//     udf3,
+//     udf4,
+//     udf5,
+//   } = paymentData;
+
+//   if (!txnid || !status || !hash) {
+//     throw new Error("Invalid PayU payment response.");
+//   }
+
+//   const isValidHash = verifyPayUResponseHash(paymentData);
+
+//   if (!isValidHash) {
+//     throw new Error("Payment verification failed.");
+//   }
+
+//   const payment = await Payment.findOne({ txnid });
+
+//   if (!payment) {
+//     throw new Error("Payment transaction not found.");
+//   }
+
+//   if (payment.userId.toString() !== userId.toString()) {
+//     throw new Error("Payment does not belong to this user.");
+//   }
+
+//   if (status !== "success") {
+//     payment.status = "failed";
+//     payment.rawResponse = paymentData;
+//     await payment.save();
+
+//     throw new Error("Payment was not successful.");
+//   }
+
+//   if (payment.status === "success") {
+//     return {
+//       success: true,
+//       message: "Payment already verified.",
+//       applicationId: payment.contestantId,
+//     };
+//   }
+
+//   payment.status = "success";
+//   payment.mihpayid = mihpayid || null;
+//   payment.paymentMode = paymentData.mode || null;
+//   payment.bankReferenceNumber = paymentData.bank_ref_num || null;
+//   payment.rawResponse = paymentData;
+
+//   await payment.save();
+
+//   const profile = await ContestantProfile.findById(payment.contestantId);
+
+//   if (!profile) {
+//     throw new Error("Contestant profile not found.");
+//   }
+
+//   profile.registrationFeePaid = true;
+//   profile.registrationPaymentId = payment._id;
+//   profile.status = "pending_review";
+
+//   if (!profile.registrationConfirmationEmailSent) {
+//     try {
+//       await sendCandidateRegistrationSuccessEmail({
+//         to: profile.email,
+//         fullName: profile.fullName,
+//         applicationId: profile.applicationId,
+//       });
+
+//       profile.registrationConfirmationEmailSent = true;
+//     } catch (emailError) {
+//       console.error("Candidate registration email failed:", emailError.message);
+//     }
+//   }
+
+//   await profile.save();
+
+//   return {
+//     success: true,
+//     message:
+//       "Registration fee payment verified successfully. Application submitted for verification.",
+//     applicationId: profile.applicationId,
+//     status: profile.status,
+//   };
+// };
+
+
+
 const verifyRegistrationFee = async (userId, paymentData) => {
   const {
     txnid,
     mihpayid,
     status,
     hash,
-    amount,
-    productinfo,
-    firstname,
-    email,
-    udf1,
-    udf2,
-    udf3,
-    udf4,
-    udf5,
   } = paymentData;
 
   if (!txnid || !status || !hash) {
@@ -401,20 +490,27 @@ const verifyRegistrationFee = async (userId, paymentData) => {
   const isValidHash = verifyPayUResponseHash(paymentData);
 
   if (!isValidHash) {
+    console.error("PayU hash verification failed:", { txnid });
     throw new Error("Payment verification failed.");
   }
 
   const payment = await Payment.findOne({ txnid });
 
   if (!payment) {
+    console.error("PayU payment record not found:", { txnid });
     throw new Error("Payment transaction not found.");
   }
 
-  if (payment.userId.toString() !== userId.toString()) {
+  if (String(payment.userId) !== String(userId)) {
+    console.error("PayU user mismatch:", { txnid });
     throw new Error("Payment does not belong to this user.");
   }
 
-  if (status !== "success") {
+  if (String(payment.type) !== "registration") {
+    throw new Error("This is not a contestant registration payment.");
+  }
+
+  if (String(status).toLowerCase() !== "success") {
     payment.status = "failed";
     payment.rawResponse = paymentData;
     await payment.save();
@@ -422,28 +518,36 @@ const verifyRegistrationFee = async (userId, paymentData) => {
     throw new Error("Payment was not successful.");
   }
 
-  if (payment.status === "success") {
-    return {
-      success: true,
-      message: "Payment already verified.",
-      applicationId: payment.contestantId,
-    };
-  }
-
-  payment.status = "success";
-  payment.mihpayid = mihpayid || null;
-  payment.paymentMode = paymentData.mode || null;
-  payment.bankReferenceNumber = paymentData.bank_ref_num || null;
-  payment.rawResponse = paymentData;
-
-  await payment.save();
-
-  const profile = await ContestantProfile.findById(payment.contestantId);
+  const profile = await ContestantProfile.findById(
+    payment.contestantId
+  );
 
   if (!profile) {
+    console.error("Contestant profile not found for payment:", {
+      txnid,
+      contestantId: String(payment.contestantId),
+    });
+
     throw new Error("Contestant profile not found.");
   }
 
+  if (String(profile.userId) !== String(userId)) {
+    throw new Error("Contestant profile does not belong to this user.");
+  }
+
+  // Update the payment record only if it has not been verified already.
+  if (payment.status !== "success") {
+    payment.status = "success";
+    payment.mihpayid = mihpayid || null;
+    payment.paymentMode = paymentData.mode || null;
+    payment.bankReferenceNumber =
+      paymentData.bank_ref_num || null;
+    payment.rawResponse = paymentData;
+
+    await payment.save();
+  }
+
+  // Always synchronize the profile, even for an already-successful payment.
   profile.registrationFeePaid = true;
   profile.registrationPaymentId = payment._id;
   profile.status = "pending_review";
@@ -458,20 +562,31 @@ const verifyRegistrationFee = async (userId, paymentData) => {
 
       profile.registrationConfirmationEmailSent = true;
     } catch (emailError) {
-      console.error("Candidate registration email failed:", emailError.message);
+      console.error(
+        "Candidate registration email failed:",
+        emailError.message
+      );
     }
   }
 
   await profile.save();
 
+  console.log("Contestant registration verified:", {
+    txnid,
+    applicationId: profile.applicationId,
+    contestantId: String(profile._id),
+    status: profile.status,
+    registrationFeePaid: profile.registrationFeePaid,
+  });
+
   return {
     success: true,
-    message:
-      "Registration fee payment verified successfully. Application submitted for verification.",
+    message: "Registration fee payment verified successfully.",
     applicationId: profile.applicationId,
     status: profile.status,
   };
 };
+
 
 // Get My Profile Dashboard (Step 7)
 const getMyProfile = async (userId) => {
