@@ -104,8 +104,8 @@ const refreshLeaderboardRanks = async () => {
 //     },
 //   };
 // };
-const getLiveLeaderboard = async ({ page = 1, limit = 50, search, city }) => {
-  // Ensure ranks are updated
+
+const getLiveLeaderboard = async ({ search, city }) => {
   await refreshLeaderboardRanks();
 
   const query = { status: "approved" };
@@ -121,19 +121,20 @@ const getLiveLeaderboard = async ({ page = 1, limit = 50, search, city }) => {
     query.city = new RegExp(city, "i");
   }
 
-  const skip = (page - 1) * limit;
-
   const contestants = await ContestantProfile.find(query)
     .sort({ totalValidVotes: -1, updatedAt: 1 })
-    .skip(skip)
-    .limit(limit)
-    .select("applicationId fullName profilePhotoUrl city state age totalValidVotes rank previousRank lastVoteReceivedAt selectionStatus isWildCardSelected");
-
-  const totalCount = await ContestantProfile.countDocuments(query);
+    .select(
+      "applicationId fullName profilePhotoUrl city state age totalValidVotes rank previousRank lastVoteReceivedAt selectionStatus isWildCardSelected"
+    );
 
   const formattedLeaderboard = contestants.map((c) => {
-    const rankDiff = c.previousRank && c.previousRank > 0 ? c.previousRank - c.rank : 0;
+    const rankDiff =
+      c.previousRank && c.previousRank > 0
+        ? c.previousRank - c.rank
+        : 0;
+
     let movement = "SAME";
+
     if (rankDiff > 0) movement = "UP";
     else if (rankDiff < 0) movement = "DOWN";
 
@@ -156,26 +157,27 @@ const getLiveLeaderboard = async ({ page = 1, limit = 50, search, city }) => {
   });
 
   const totalValidVotesCastResult = await ContestantProfile.aggregate([
-    { $match: { isLive: true, status: "approved" } },
-    { $group: { _id: null, totalVotes: { $sum: "$totalValidVotes" } } },
+    { $match: { status: "approved" } },
+    {
+      $group: {
+        _id: null,
+        totalVotes: { $sum: "$totalValidVotes" },
+      },
+    },
   ]);
 
-  const totalVotesCast = totalValidVotesCastResult[0]?.totalVotes || 0;
+  const totalVotesCast =
+    totalValidVotesCastResult[0]?.totalVotes || 0;
 
   return {
     leaderboard: formattedLeaderboard,
-    pagination: {
-      totalContestants: totalCount,
-      page: Number(page),
-      pages: Math.ceil(totalCount / limit),
-      limit: Number(limit),
-    },
     meta: {
       totalVotesCast,
       lastUpdated: new Date(),
     },
   };
 };
+
 
 module.exports = {
   refreshLeaderboardRanks,
