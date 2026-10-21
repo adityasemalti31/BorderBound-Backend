@@ -5,6 +5,9 @@ const Payment = require("../models/payment.model");
 const { getRegistrationFeeInfo } = require("../utils/dateUtils");
 const { createPayment, verifyPayUResponseHash } = require("./payment.service");
 const { uploadFile } = require("./upload.service");
+
+
+const mongoose = require('mongoose')
 const {
   sendCandidateRegistrationSuccessEmail,
 } = require("../utils/candidateEmails");
@@ -659,6 +662,61 @@ const getPublicContestantById = async (contestantId) => {
   return profile;
 };
 
+
+const updateProfilePhoto = async (userId, fileBuffer, originalName) => {
+ const profile = await ContestantProfile.findOne({
+  userId: new mongoose.Types.ObjectId(userId),
+});
+
+if (!profile) {
+  const debug = await ContestantProfile.findOne({
+    applicationId: "BB-2026-00444",
+  }).select("_id userId applicationId fullName");
+
+  console.log("PHOTO DEBUG:", {
+    receivedUserId: userId,
+    database: ContestantProfile.db.name,
+    collection: ContestantProfile.collection.name,
+    foundByApplicationId: debug,
+  });
+
+  throw new Error("Contestant profile not found. Check Render logs.");
+}
+  const uploadRes = await uploadFile(
+    fileBuffer,
+    originalName,
+    "borderbound_docs"
+  );
+
+  profile.profilePhotoUrl = uploadRes.url;
+
+  const existingDocIndex = profile.documents.findIndex(
+    (doc) => doc.docType === "photograph"
+  );
+
+  if (existingDocIndex > -1) {
+    profile.documents[existingDocIndex].url = uploadRes.url;
+    profile.documents[existingDocIndex].publicId =
+      uploadRes.publicId;
+    profile.documents[existingDocIndex].status = "pending";
+    profile.documents[existingDocIndex].uploadedAt = new Date();
+  } else {
+    profile.documents.push({
+      docType: "photograph",
+      url: uploadRes.url,
+      publicId: uploadRes.publicId,
+      status: "pending",
+      uploadedAt: new Date(),
+    });
+  }
+
+  await profile.save();
+
+  return profile;
+};
+
+
+
 module.exports = {
   createOrUpdateProfile,
   uploadContestantDoc,
@@ -668,5 +726,6 @@ module.exports = {
   getMyProfile,
   getPublicContestants,
   getPublicContestantById,
-  sendPendingPaymentReminders
+  sendPendingPaymentReminders,
+  updateProfilePhoto
 };

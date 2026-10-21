@@ -32,6 +32,78 @@ const refreshLeaderboardRanks = async () => {
 };
 
 // Step 7 & 9: Live Voting Leaderboard API
+// const getLiveLeaderboard = async ({ page = 1, limit = 50, search, city }) => {
+//   // Ensure ranks are updated
+//   await refreshLeaderboardRanks();
+
+//   const query = { isLive: true, status: "approved" };
+
+//   if (search) {
+//     query.$or = [
+//       { fullName: new RegExp(search, "i") },
+//       { applicationId: new RegExp(search, "i") },
+//     ];
+//   }
+
+//   if (city) {
+//     query.city = new RegExp(city, "i");
+//   }
+
+//   const skip = (page - 1) * limit;
+
+//   const contestants = await ContestantProfile.find(query)
+//     .sort({ totalValidVotes: -1, updatedAt: 1 })
+//     .skip(skip)
+//     .limit(limit)
+//     .select("applicationId fullName profilePhotoUrl city state age totalValidVotes rank previousRank lastVoteReceivedAt selectionStatus isWildCardSelected");
+
+//   const totalCount = await ContestantProfile.countDocuments(query);
+
+//   const formattedLeaderboard = contestants.map((c) => {
+//     const rankDiff = c.previousRank && c.previousRank > 0 ? c.previousRank - c.rank : 0;
+//     let movement = "SAME";
+//     if (rankDiff > 0) movement = "UP";
+//     else if (rankDiff < 0) movement = "DOWN";
+
+//     return {
+//       id: c._id,
+//       applicationId: c.applicationId,
+//       fullName: c.fullName,
+//       profilePhotoUrl: c.profilePhotoUrl,
+//       city: c.city,
+//       state: c.state,
+//       age: c.age,
+//       totalValidVotes: c.totalValidVotes,
+//       rank: c.rank,
+//       previousRank: c.previousRank,
+//       movement,
+//       rankChange: Math.abs(rankDiff),
+//       selectionStatus: c.selectionStatus,
+//       isWildCardSelected: c.isWildCardSelected,
+//     };
+//   });
+
+//   const totalValidVotesCastResult = await ContestantProfile.aggregate([
+//     { $match: { isLive: true, status: "approved" } },
+//     { $group: { _id: null, totalVotes: { $sum: "$totalValidVotes" } } },
+//   ]);
+
+//   const totalVotesCast = totalValidVotesCastResult[0]?.totalVotes || 0;
+
+//   return {
+//     leaderboard: formattedLeaderboard,
+//     pagination: {
+//       totalContestants: totalCount,
+//       page: Number(page),
+//       pages: Math.ceil(totalCount / limit),
+//       limit: Number(limit),
+//     },
+//     meta: {
+//       totalVotesCast,
+//       lastUpdated: new Date(),
+//     },
+//   };
+// };
 const getLiveLeaderboard = async ({ page = 1, limit = 50, search, city }) => {
   // Ensure ranks are updated
   await refreshLeaderboardRanks();

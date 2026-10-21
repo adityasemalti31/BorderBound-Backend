@@ -1,4 +1,3 @@
-
 const mongoose = require("mongoose");
 
 const ContestantProfile = require("../models/contestant.model");
@@ -7,10 +6,7 @@ const VoteTransaction = require("../models/voteTransaction.model");
 const Payment = require("../models/payment.model");
 
 const { getVotingStatusInfo } = require("../utils/dateUtils");
-const {
-  createPayment,
-  verifyPayUResponseHash,
-} = require("./payment.service");
+const { createPayment, verifyPayUResponseHash } = require("./payment.service");
 
 const MAX_VOTES_PER_ORDER = 1000;
 
@@ -63,14 +59,9 @@ const isValidObjectId = (value) => {
 const getVotingPackages = async () => {
   const config = await getSystemConfig();
 
-  const votingStatus = getVotingStatusInfo(
-    new Date(),
-    config
-  );
+  const votingStatus = getVotingStatusInfo(new Date(), config);
 
-  const unitPrice = normalizeAmount(
-    config.voteUnitPrice || 5
-  );
+  const unitPrice = normalizeAmount(config.voteUnitPrice || 5);
 
   if (unitPrice === null || unitPrice <= 0) {
     throw new Error("Invalid voting price configuration.");
@@ -96,18 +87,16 @@ const getVotingPackages = async () => {
   ];
 
   const packages = packageDefinitions.map((pkg) => {
-    const amount = normalizeAmount(
-      pkg.votes * unitPrice
-    );
+    const amount = normalizeAmount(pkg.votes * unitPrice);
 
     return {
       id: pkg.id,
       votes: pkg.votes,
       amount,
       label: `${pkg.votes.toLocaleString(
-        "en-IN"
+        "en-IN",
       )} Vote${pkg.votes === 1 ? "" : "s"} (₹${amount.toLocaleString(
-        "en-IN"
+        "en-IN",
       )})`,
     };
   });
@@ -128,15 +117,11 @@ const createVoteOrder = async ({
 }) => {
   const config = await getSystemConfig();
 
-  const votingStatus = getVotingStatusInfo(
-    new Date(),
-    config
-  );
+  const votingStatus = getVotingStatusInfo(new Date(), config);
 
   if (!votingStatus.isOpen) {
     throw new Error(
-      votingStatus.reason ||
-        "Public voting is currently closed."
+      votingStatus.reason || "Public voting is currently closed.",
     );
   }
 
@@ -148,7 +133,7 @@ const createVoteOrder = async ({
 
   if (!normalizedVotes) {
     throw new Error(
-      `Invalid votes quantity. Must be a whole number between 1 and ${MAX_VOTES_PER_ORDER} votes.`
+      `Invalid votes quantity. Must be a whole number between 1 and ${MAX_VOTES_PER_ORDER} votes.`,
     );
   }
 
@@ -160,9 +145,7 @@ const createVoteOrder = async ({
     .lean();
 
   if (!contestant) {
-    throw new Error(
-      "Contestant profile not found or not eligible for voting."
-    );
+    throw new Error("Contestant profile not found or not eligible for voting.");
   }
 
   /*
@@ -178,17 +161,13 @@ const createVoteOrder = async ({
    * }
    */
 
-  const unitPrice = normalizeAmount(
-    config.voteUnitPrice || 5
-  );
+  const unitPrice = normalizeAmount(config.voteUnitPrice || 5);
 
   if (unitPrice === null || unitPrice <= 0) {
     throw new Error("Invalid voting price configuration.");
   }
 
-  const amount = normalizeAmount(
-    normalizedVotes * unitPrice
-  );
+  const amount = normalizeAmount(normalizedVotes * unitPrice);
 
   if (amount === null || amount <= 0) {
     throw new Error("Invalid voting amount.");
@@ -239,17 +218,10 @@ const createVoteOrder = async ({
   };
 };
 
-const buildVoteResult = async (
-  contestantId,
-  message,
-  transactionId = null
-) => {
-  const contestant =
-    await ContestantProfile.findById(contestantId)
-      .select(
-        "_id fullName totalValidVotes rank"
-      )
-      .lean();
+const buildVoteResult = async (contestantId, message, transactionId = null) => {
+  const contestant = await ContestantProfile.findById(contestantId)
+    .select("_id fullName totalValidVotes rank")
+    .lean();
 
   return {
     success: true,
@@ -258,8 +230,7 @@ const buildVoteResult = async (
       ? {
           id: contestant._id,
           fullName: contestant.fullName,
-          totalValidVotes:
-            contestant.totalValidVotes,
+          totalValidVotes: contestant.totalValidVotes,
           currentRank: contestant.rank,
         }
       : null,
@@ -276,30 +247,20 @@ const verifyVotePayment = async (paymentData) => {
 
   if (config.isFinalized) {
     throw new Error(
-      "Voting period is officially finalized. No new votes can be verified."
+      "Voting period is officially finalized. No new votes can be verified.",
     );
   }
 
-  const {
-    txnid,
-    status,
-    hash,
-    voterIp,
-  } = paymentData || {};
+  const { txnid, status, hash, voterIp } = paymentData || {};
 
   if (!txnid || !status || !hash) {
-    throw new Error(
-      "Invalid PayU payment response."
-    );
+    throw new Error("Invalid PayU payment response.");
   }
 
-  const isValidHash =
-    verifyPayUResponseHash(paymentData);
+  const isValidHash = verifyPayUResponseHash(paymentData);
 
   if (!isValidHash) {
-    throw new Error(
-      "Payment verification failed."
-    );
+    throw new Error("Payment verification failed.");
   }
 
   /*
@@ -312,45 +273,31 @@ const verifyVotePayment = async (paymentData) => {
   });
 
   if (!payment) {
-    throw new Error(
-      "Payment transaction not found."
-    );
+    throw new Error("Payment transaction not found.");
   }
 
   if (!payment.contestantId) {
-    throw new Error(
-      "Payment has no contestant associated with it."
-    );
+    throw new Error("Payment has no contestant associated with it.");
   }
 
   if (
     !payment.votesGenerated ||
-    !Number.isInteger(
-      Number(payment.votesGenerated)
-    ) ||
+    !Number.isInteger(Number(payment.votesGenerated)) ||
     payment.votesGenerated < 1
   ) {
-    throw new Error(
-      "Payment contains an invalid vote quantity."
-    );
+    throw new Error("Payment contains an invalid vote quantity.");
   }
 
-  const callbackAmount = normalizeAmount(
-    paymentData.amount
-  );
+  const callbackAmount = normalizeAmount(paymentData.amount);
 
-  const storedAmount = normalizeAmount(
-    payment.amount
-  );
+  const storedAmount = normalizeAmount(payment.amount);
 
   if (
     callbackAmount === null ||
     storedAmount === null ||
     callbackAmount !== storedAmount
   ) {
-    throw new Error(
-      "Payment amount verification failed."
-    );
+    throw new Error("Payment amount verification failed.");
   }
 
   /*
@@ -359,25 +306,16 @@ const verifyVotePayment = async (paymentData) => {
    *
    * We use the original payment amount, not callback UDF4.
    */
-  const storedVotes = Number(
-    payment.votesGenerated
-  );
+  const storedVotes = Number(payment.votesGenerated);
 
-  const storedVoteUnitPrice = normalizeAmount(
-    config.voteUnitPrice || 5
-  );
+  const storedVoteUnitPrice = normalizeAmount(config.voteUnitPrice || 5);
 
-  if (
-    storedVoteUnitPrice === null ||
-    storedVoteUnitPrice <= 0
-  ) {
-    throw new Error(
-      "Invalid voting price configuration."
-    );
+  if (storedVoteUnitPrice === null || storedVoteUnitPrice <= 0) {
+    throw new Error("Invalid voting price configuration.");
   }
 
   const expectedStoredAmount = normalizeAmount(
-    storedVotes * storedVoteUnitPrice
+    storedVotes * storedVoteUnitPrice,
   );
 
   /*
@@ -391,23 +329,18 @@ const verifyVotePayment = async (paymentData) => {
    * payment.amount === callback.amount
    */
 
-  if (status !== "success") {
-    /*
-     * Keep the complete PayU response for financial audit.
-     * Only mark a payment failed if it has not already been
-     * successfully processed.
-     */
-    if (
-      payment.status !== "success"
-    ) {
-      payment.status = "failed";
-      payment.rawResponse = paymentData;
-      await payment.save();
+  const normalizedStatus = String(status).trim().toLowerCase();
+
+  if (normalizedStatus !== "success") {
+    if (normalizedStatus === "failure" || normalizedStatus === "failed") {
+      if (!["success", "failed", "cancelled"].includes(payment.status)) {
+        payment.status = "failed";
+        payment.rawResponse = paymentData;
+        await payment.save();
+      }
     }
 
-    throw new Error(
-      "Payment was not successful."
-    );
+    throw new Error("Payment was not successful.");
   }
 
   /*
@@ -417,26 +350,22 @@ const verifyVotePayment = async (paymentData) => {
    * We do NOT increment votes again.
    */
   if (payment.status === "success") {
-    const existingTransaction =
-      await VoteTransaction.findOne({
-        paymentId: payment._id,
-      })
-        .select("_id")
-        .lean();
+    const existingTransaction = await VoteTransaction.findOne({
+      paymentId: payment._id,
+    })
+      .select("_id")
+      .lean();
 
     return buildVoteResult(
       payment.contestantId,
       "Payment already verified.",
-      existingTransaction?._id || null
+      existingTransaction?._id || null,
     );
   }
 
-  if (
-    payment.status === "failed" ||
-    payment.status === "cancelled"
-  ) {
+  if (payment.status === "failed" || payment.status === "cancelled") {
     throw new Error(
-      "This payment transaction has already been closed and cannot be verified again."
+      "This payment transaction has already been closed and cannot be verified again.",
     );
   }
 
@@ -449,8 +378,7 @@ const verifyVotePayment = async (paymentData) => {
    *
    * If any operation fails, everything rolls back.
    */
-  const session =
-    await mongoose.startSession();
+  const session = await mongoose.startSession();
 
   let transactionId = null;
 
@@ -463,34 +391,27 @@ const verifyVotePayment = async (paymentData) => {
          * If another callback already claimed this payment,
          * this update will match zero documents.
          */
-        const claimedPayment =
-          await Payment.findOneAndUpdate(
-            {
-              _id: payment._id,
-              status: {
-                $in: ["created", "pending"],
-              },
+        const claimedPayment = await Payment.findOneAndUpdate(
+          {
+            _id: payment._id,
+            status: {
+              $in: ["created", "pending"],
             },
-            {
-              $set: {
-                status: "success",
-                mihpayid:
-                  paymentData.mihpayid ||
-                  null,
-                paymentMode:
-                  paymentData.mode ||
-                  null,
-                bankReferenceNumber:
-                  paymentData.bank_ref_num ||
-                  null,
-                rawResponse: paymentData,
-              },
+          },
+          {
+            $set: {
+              status: "success",
+              mihpayid: paymentData.mihpayid || null,
+              paymentMode: paymentData.mode || null,
+              bankReferenceNumber: paymentData.bank_ref_num || null,
+              rawResponse: paymentData,
             },
-            {
-              new: true,
-              session,
-            }
-          );
+          },
+          {
+            new: true,
+            session,
+          },
+        );
 
         if (!claimedPayment) {
           /*
@@ -498,41 +419,36 @@ const verifyVotePayment = async (paymentData) => {
            *
            * Check the transaction inside the same session.
            */
-          const existingTransaction =
-            await VoteTransaction.findOne({
-              paymentId: payment._id,
-            })
-              .select("_id")
-              .session(session)
-              .lean();
+          const existingTransaction = await VoteTransaction.findOne({
+            paymentId: payment._id,
+          })
+            .select("_id")
+            .session(session)
+            .lean();
 
           if (existingTransaction) {
-            transactionId =
-              existingTransaction._id;
+            transactionId = existingTransaction._id;
             return;
           }
 
           throw new Error(
-            "Payment is currently being processed. Please do not retry."
+            "Payment is currently being processed. Please do not retry.",
           );
         }
 
         /*
          * Verify contestant still exists and is approved.
          */
-        const contestant =
-          await ContestantProfile.findOne({
-            _id: claimedPayment.contestantId,
-            status: "approved",
-          })
-            .select(
-              "_id fullName totalValidVotes rank"
-            )
-            .session(session);
+        const contestant = await ContestantProfile.findOne({
+          _id: claimedPayment.contestantId,
+          status: "approved",
+        })
+          .select("_id fullName totalValidVotes rank")
+          .session(session);
 
         if (!contestant) {
           throw new Error(
-            "Target contestant profile not found or is no longer eligible for voting."
+            "Target contestant profile not found or is no longer eligible for voting.",
           );
         }
 
@@ -540,19 +456,15 @@ const verifyVotePayment = async (paymentData) => {
          * Finalization is checked again immediately before
          * applying the financial vote allocation.
          */
-        const latestConfig =
-          await SystemConfig.findOne({
-            key: "DEFAULT_CONFIG",
-          })
-            .session(session)
-            .lean();
+        const latestConfig = await SystemConfig.findOne({
+          key: "DEFAULT_CONFIG",
+        })
+          .session(session)
+          .lean();
 
-        if (
-          latestConfig &&
-          latestConfig.isFinalized
-        ) {
+        if (latestConfig && latestConfig.isFinalized) {
           throw new Error(
-            "Voting period is officially finalized. No new votes can be verified."
+            "Voting period is officially finalized. No new votes can be verified.",
           );
         }
 
@@ -560,111 +472,75 @@ const verifyVotePayment = async (paymentData) => {
          * Atomically add the exact number of votes stored
          * in our Payment document.
          */
-        const updatedContestant =
-          await ContestantProfile.findOneAndUpdate(
-            {
-              _id: claimedPayment.contestantId,
-              status: "approved",
+        const updatedContestant = await ContestantProfile.findOneAndUpdate(
+          {
+            _id: claimedPayment.contestantId,
+            status: "approved",
+          },
+          {
+            $inc: {
+              totalValidVotes: Number(claimedPayment.votesGenerated),
             },
-            {
-              $inc: {
-                totalValidVotes:
-                  Number(
-                    claimedPayment.votesGenerated
-                  ),
-              },
-              $set: {
-                lastVoteReceivedAt:
-                  new Date(),
-              },
+            $set: {
+              lastVoteReceivedAt: new Date(),
             },
-            {
-              new: true,
-              session,
-            }
-          );
+          },
+          {
+            new: true,
+            session,
+          },
+        );
 
         if (!updatedContestant) {
-          throw new Error(
-            "Target contestant profile could not be updated."
-          );
+          throw new Error("Target contestant profile could not be updated.");
         }
 
         /*
          * Store COMPLETE financial/audit information.
          */
-        const createdTransaction =
-          await VoteTransaction.create(
-            [
-              {
-                contestantId:
-                  claimedPayment.contestantId,
-
-                voterUserId:
-                  claimedPayment.userId ||
-                  null,
-
-                voterIp:
-                  voterIp ||
-                  claimedPayment.ipAddress ||
-                  "0.0.0.0",
-
-                voterUserAgent:
-                  claimedPayment.userAgent ||
-                  null,
-
-                paymentId:
-                  claimedPayment._id,
-
-                txnid:
-                  claimedPayment.txnid,
-
-                mihpayid:
-                  claimedPayment.mihpayid ||
-                  null,
-
-                votesCount:
-                  Number(
-                    claimedPayment.votesGenerated
-                  ),
-
-                votePriceUnit:
-                  normalizeAmount(
-                    Number(
-                      claimedPayment.amount
-                    ) /
-                      Number(
-                        claimedPayment.votesGenerated
-                      )
-                  ),
-
-                totalAmountPaid:
-                  Number(
-                    claimedPayment.amount
-                  ),
-
-                paymentMode:
-                  claimedPayment.paymentMode ||
-                  null,
-
-                bankReferenceNumber:
-                  claimedPayment.bankReferenceNumber ||
-                  null,
-
-                paymentStatus: "success",
-
-                status: "valid",
-
-                payuResponse: paymentData,
-              },
-            ],
+        const createdTransaction = await VoteTransaction.create(
+          [
             {
-              session,
-            }
-          );
+              contestantId: claimedPayment.contestantId,
 
-        transactionId =
-          createdTransaction[0]._id;
+              voterUserId: claimedPayment.userId || null,
+
+              voterIp: voterIp || claimedPayment.ipAddress || "0.0.0.0",
+
+              voterUserAgent: claimedPayment.userAgent || null,
+
+              paymentId: claimedPayment._id,
+
+              txnid: claimedPayment.txnid,
+
+              mihpayid: claimedPayment.mihpayid || null,
+
+              votesCount: Number(claimedPayment.votesGenerated),
+
+              votePriceUnit: normalizeAmount(
+                Number(claimedPayment.amount) /
+                  Number(claimedPayment.votesGenerated),
+              ),
+
+              totalAmountPaid: Number(claimedPayment.amount),
+
+              paymentMode: claimedPayment.paymentMode || null,
+
+              bankReferenceNumber: claimedPayment.bankReferenceNumber || null,
+
+              paymentStatus: "success",
+
+              status: "valid",
+
+              payuResponse: paymentData,
+            },
+          ],
+          {
+            session,
+          },
+        );
+
+        transactionId = createdTransaction[0]._id;
       },
       {
         readConcern: {
@@ -674,7 +550,7 @@ const verifyVotePayment = async (paymentData) => {
           w: "majority",
         },
         maxCommitTimeMS: 10000,
-      }
+      },
     );
   } catch (error) {
     /*
@@ -682,24 +558,20 @@ const verifyVotePayment = async (paymentData) => {
      *
      * The transaction itself is the primary protection.
      */
-    if (
-      error?.code === 11000
-    ) {
-      const existingTransaction =
-        await VoteTransaction.findOne({
-          paymentId: payment._id,
-        })
-          .select("_id")
-          .lean();
+    if (error?.code === 11000) {
+      const existingTransaction = await VoteTransaction.findOne({
+        paymentId: payment._id,
+      })
+        .select("_id")
+        .lean();
 
       if (existingTransaction) {
-        transactionId =
-          existingTransaction._id;
+        transactionId = existingTransaction._id;
 
         return buildVoteResult(
           payment.contestantId,
           "Payment already verified.",
-          transactionId
+          transactionId,
         );
       }
     }
@@ -711,10 +583,8 @@ const verifyVotePayment = async (paymentData) => {
 
   return buildVoteResult(
     payment.contestantId,
-    `Successfully cast ${Number(
-      payment.votesGenerated
-    )} votes!`,
-    transactionId
+    `Successfully cast ${Number(payment.votesGenerated)} votes!`,
+    transactionId,
   );
 };
 

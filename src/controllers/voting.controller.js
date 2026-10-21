@@ -146,94 +146,171 @@ const confirmVotePayment = async (
   }
 };
 
-const handlePayUVotingSuccess = async (
-  req,
-  res
-) => {
+// const handlePayUVotingSuccess = async (
+//   req,
+//   res
+// ) => {
+//   const body = req.body || {};
+
+//   try {
+//     const voterIp =
+//       getClientIp(req);
+
+//     const result =
+//       await verifyVotePayment({
+//         ...body,
+//         voterIp,
+//       });
+
+//     const contestantId =
+//       body.udf3 || "";
+
+//     const votesCount =
+//       body.udf4 || "";
+
+//     if (
+//       isPayURedirectRequest(req)
+//     ) {
+//       const redirectPath =
+//         getContestantRedirectPath(
+//           contestantId
+//         );
+
+//       const params =
+//         new URLSearchParams({
+//           voting: "success",
+//           ...(votesCount
+//             ? {
+//                 votes: String(
+//                   votesCount
+//                 ),
+//               }
+//             : {}),
+//           ...(body.txnid
+//             ? {
+//                 txnid: String(
+//                   body.txnid
+//                 ),
+//               }
+//             : {}),
+//         });
+
+//       return res.redirect(
+//         `${FRONTEND_URL}${redirectPath}?${params.toString()}`
+//       );
+//     }
+
+//     return res.status(200).json(
+//       result
+//     );
+//   } catch (error) {
+//     console.error(
+//       "PayU voting success callback error:",
+//       error
+//     );
+
+//     const contestantId =
+//       body.udf3 || "";
+
+//     if (
+//       isPayURedirectRequest(req)
+//     ) {
+//       const redirectPath =
+//         getContestantRedirectPath(
+//           contestantId
+//         );
+
+//       /*
+//        * Do NOT expose internal error.message
+//        * in the redirect URL.
+//        */
+//       return res.redirect(
+//         `${FRONTEND_URL}${redirectPath}?voting=failed&reason=Payment%20verification%20failed`
+//       );
+//     }
+
+//     return res.status(400).json({
+//       success: false,
+//       message:
+//         error.message ||
+//         "Payment verification failed.",
+//     });
+//   }
+// };
+
+const handlePayUVotingSuccess = async (req, res) => {
   const body = req.body || {};
+  const txnid = String(body.txnid || "");
+  const redirectRequest = isPayURedirectRequest(req);
 
   try {
-    const voterIp =
-      getClientIp(req);
+    const voterIp = getClientIp(req);
 
-    const result =
-      await verifyVotePayment({
-        ...body,
-        voterIp,
-      });
+    const result = await verifyVotePayment({
+      ...body,
+      voterIp,
+    });
 
-    const contestantId =
-      body.udf3 || "";
+    console.info("PayU voting payment verified:", {
+      txnid,
+      contestantId: result.contestant?.id || null,
+      transactionId: result.transactionId || null,
+      success: result.success,
+    });
 
-    const votesCount =
-      body.udf4 || "";
+    if (redirectRequest) {
+      const contestantId =
+        result.contestant?.id || body.udf3 || "";
 
-    if (
-      isPayURedirectRequest(req)
-    ) {
       const redirectPath =
-        getContestantRedirectPath(
-          contestantId
-        );
+        getContestantRedirectPath(contestantId);
 
-      const params =
-        new URLSearchParams({
-          voting: "success",
-          ...(votesCount
-            ? {
-                votes: String(
-                  votesCount
-                ),
-              }
-            : {}),
-          ...(body.txnid
-            ? {
-                txnid: String(
-                  body.txnid
-                ),
-              }
-            : {}),
-        });
+      const params = new URLSearchParams({
+        voting: "success",
+        ...(body.udf4
+          ? { votes: String(body.udf4) }
+          : {}),
+        ...(txnid ? { txnid } : {}),
+      });
 
       return res.redirect(
         `${FRONTEND_URL}${redirectPath}?${params.toString()}`
       );
     }
 
-    return res.status(200).json(
-      result
-    );
+    return res.status(200).json(result);
   } catch (error) {
-    console.error(
-      "PayU voting success callback error:",
-      error
-    );
+    console.error("PayU voting success callback error:", {
+      txnid,
+      status: body.status || null,
+      errorName: error.name,
+      errorMessage: error.message,
+      errorCode: error.code || null,
+      errorLabels: error.errorLabels || [],
+      stack: error.stack,
+    });
 
-    const contestantId =
-      body.udf3 || "";
-
-    if (
-      isPayURedirectRequest(req)
-    ) {
+    if (redirectRequest) {
+      const contestantId = body.udf3 || "";
       const redirectPath =
-        getContestantRedirectPath(
-          contestantId
-        );
+        getContestantRedirectPath(contestantId);
 
-      /*
-       * Do NOT expose internal error.message
-       * in the redirect URL.
-       */
+      const params = new URLSearchParams({
+        voting: "pending",
+        ...(txnid ? { txnid } : {}),
+      });
+
       return res.redirect(
-        `${FRONTEND_URL}${redirectPath}?voting=failed&reason=Payment%20verification%20failed`
+        `${FRONTEND_URL}${redirectPath}?${params.toString()}`
       );
     }
 
-    return res.status(400).json({
+    return res.status(500).json({
       success: false,
+      pending: true,
+      txnid: txnid || null,
       message:
-        error.message ||
-        "Payment verification failed.",
+        "Payment verification could not be completed. Please check the payment status before retrying.",
     });
   }
 };

@@ -1,7 +1,6 @@
 const multer = require("multer");
 const path = require("path");
 
-// Memory storage to buffer files for Cloudinary / local storage helper
 const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
@@ -11,24 +10,46 @@ const fileFilter = (req, file, cb) => {
     "image/png",
     "image/webp",
     "application/pdf",
+    "application/octet-stream",
   ];
 
-  if (allowedTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(
+  const allowedExtensions = [
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".pdf",
+  ];
+
+  const extension = path
+    .extname(file.originalname)
+    .toLowerCase();
+
+  if (!allowedExtensions.includes(extension)) {
+    return cb(
       new Error(
-        `Unsupported file format: ${file.mimetype}. Allowed: JPG, PNG, WEBP, PDF`
+        "Unsupported file format. Allowed: JPG, PNG, WEBP, PDF"
       ),
       false
     );
   }
+
+  if (!allowedTypes.includes(file.mimetype)) {
+    return cb(
+      new Error(
+        `Unsupported file format: ${file.mimetype}`
+      ),
+      false
+    );
+  }
+
+  cb(null, true);
 };
 
 const upload = multer({
   storage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10 MB limit
+    fileSize: 10 * 1024 * 1024,
   },
   fileFilter,
 });

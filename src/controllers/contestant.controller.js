@@ -7,6 +7,7 @@ const {
   getMyProfile,
   getPublicContestants,
   getPublicContestantById,
+  updateProfilePhoto
 } = require("../services/contestant.service");
 
 const saveProfile = async (req, res) => {
@@ -232,6 +233,35 @@ const fetchPublicContestantById = async (req, res) => {
     });
   }
 };
+const handleUpdateProfilePhoto = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select a profile photo.",
+      });
+    }
+
+   const profile = await updateProfilePhoto(
+  req.body.userId,
+  req.file.buffer,
+  req.file.originalname
+);
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile photo updated successfully.",
+      data: {
+        profilePhotoUrl: profile.profilePhotoUrl,
+      },
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 module.exports = {
   saveProfile,
@@ -243,4 +273,5 @@ module.exports = {
   fetchMyProfile,
   fetchPublicContestants,
   fetchPublicContestantById,
+  handleUpdateProfilePhoto
 };
