@@ -65,12 +65,19 @@ const sendPendingPaymentReminders = async () => {
   return candidates.length;
 };
 
-// Helper to generate unique Application ID: BB-2026-XXXXX
 const generateApplicationId = async () => {
-  const count = await ContestantProfile.countDocuments();
   const year = new Date().getFullYear();
-  const numStr = String(count + 1).padStart(5, "0");
-  return `BB-${year}-${numStr}`;
+  const prefix = `BB-${year}-`;
+
+  const lastProfile = await ContestantProfile.findOne({
+    applicationId: { $regex: `^${prefix}\\d+$` },
+  }).sort({ applicationId: -1 }).select("applicationId");
+
+  const lastNumber = lastProfile
+    ? Number(lastProfile.applicationId.split("-").pop())
+    : 0;
+
+  return `${prefix}${String(lastNumber + 1).padStart(5, "0")}`;
 };
 
 const getSystemConfig = async () => {
