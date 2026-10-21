@@ -31,7 +31,7 @@ router.post("/payu/success", handlePayUSuccess);
 router.post("/payu/failure", handlePayUFailure);
 
 // Protected contestant endpoints
-// router.use(protect);
+router.use(protect);
 router.post("/profile", saveProfile);
 router.post("/documents", upload.single("file"), uploadDocument);
 router.post("/terms", handleAcceptTerms);
