@@ -13,7 +13,7 @@ const {
 const saveProfile = async (req, res) => {
   try {
     const profile = await createOrUpdateProfile(
-      req.user.id,
+      req.user._id,
       req.body
     );
 
