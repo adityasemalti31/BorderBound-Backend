@@ -108,7 +108,7 @@ const getLiveLeaderboard = async ({ page = 1, limit = 50, search, city }) => {
   // Ensure ranks are updated
   await refreshLeaderboardRanks();
 
-  const query = { isLive: true, status: "approved" };
+  const query = { status: "approved" };
 
   if (search) {
     query.$or = [
