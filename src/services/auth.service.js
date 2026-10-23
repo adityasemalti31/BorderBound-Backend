@@ -370,42 +370,25 @@ const googleLogin = async (idToken) => {
 };
 
 const forgotPassword = async (email) => {
-  if (
-    typeof email !== "string" ||
-    !email.trim()
-  ) {
-    throw new Error("Email is required");
+  if (typeof email !== "string" || !email.trim()) {
+    throw new Error("Please enter your email address.");
   }
 
-  const normalizedEmail =
-    normalizeEmail(email);
+  const normalizedEmail = normalizeEmail(email);
 
   const user = await User.findOne({
     email: normalizedEmail,
-  }).select(
-    "email fullName status"
-  );
+  }).select("+email fullName status");
 
-  // Controller can always return the same public
-  // success message to prevent account enumeration.
-  if (!user) {
-    return {
-      resetToken: null,
-      email: null,
-      fullName: null,
-    };
-  }
+if (!user) {
+  throw new Error("Email is not registered");
+}
 
-  if (user.status === "blocked") {
-    return {
-      resetToken: null,
-      email: null,
-      fullName: null,
-    };
-  }
+if (user.status === "blocked") {
+  throw new Error("Your account has been blocked");
+}
 
-  const resetToken =
-    crypto.randomBytes(32).toString("hex");
+  const resetToken = crypto.randomBytes(32).toString("hex");
 
   const hashedToken = crypto
     .createHash("sha256")
@@ -422,6 +405,7 @@ const forgotPassword = async (email) => {
   });
 
   return {
+    shouldSendEmail: true,
     resetToken,
     email: user.email,
     fullName: user.fullName,
