@@ -301,9 +301,9 @@ const forgotPassword = async (email) => {
   }
 
   const normalizedEmail = normalizeEmail(email);
-const user = await User.findOne({
-  email: normalizedEmail,
-}).select("+email +fullName +status");
+  const user = await User.findOne({
+    email: normalizedEmail,
+  }).select("+email +fullName +status");
 
   if (!user) {
     throw new Error("Email is not registered");

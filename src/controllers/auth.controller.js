@@ -172,13 +172,26 @@ console.log("RESULT EMAIL:", result.email);
         "If an account with that email exists, a password reset link will be sent shortly. Please check your inbox and spam folder.",
     });
   } catch (error) {
-    console.error("Forgot Password Error:", error);
+  console.error("Forgot Password Error:", error);
 
-    return res.status(500).json({
+  const knownErrors = [
+    "Please enter your email address.",
+    "Email is not registered",
+    "Your account has been blocked",
+  ];
+
+  if (knownErrors.includes(error.message)) {
+    return res.status(400).json({
       success: false,
-      message:
-        "We couldn't process your request right now. Please try again in a few minutes.",
+      message: error.message,
     });
+  }
+
+  return res.status(500).json({
+    success: false,
+    message:
+      "We couldn't process your request right now. Please try again in a few minutes.",
+  });
   }
 };
 
