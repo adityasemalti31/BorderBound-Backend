@@ -17,7 +17,7 @@ const generateToken = (user) => {
     process.env.JWT_SECRET,
     {
       expiresIn: "7d",
-    }
+    },
   );
 };
 
@@ -27,10 +27,7 @@ const normalizeEmail = (email) => {
 };
 
 const validatePassword = (password) => {
-  if (
-    typeof password !== "string" ||
-    password.length < 8
-  ) {
+  if (typeof password !== "string" || password.length < 8) {
     throw new Error("Password must be at least 8 characters");
   }
 };
@@ -44,20 +41,13 @@ const calculateAge = (dob) => {
 
   const today = new Date();
 
-  let age =
-    today.getFullYear() -
-    birthDate.getFullYear();
+  let age = today.getFullYear() - birthDate.getFullYear();
 
-  const monthDifference =
-    today.getMonth() -
-    birthDate.getMonth();
+  const monthDifference = today.getMonth() - birthDate.getMonth();
 
   if (
     monthDifference < 0 ||
-    (
-      monthDifference === 0 &&
-      today.getDate() < birthDate.getDate()
-    )
+    (monthDifference === 0 && today.getDate() < birthDate.getDate())
   ) {
     age--;
   }
@@ -75,16 +65,7 @@ const getPublicUser = (user) => ({
 });
 
 const registerUser = async (data) => {
-  const {
-    fullName,
-    mobile,
-    email,
-    dob,
-    gender,
-    city,
-    state,
-    password,
-  } = data;
+  const { fullName, mobile, email, dob, gender, city, state, password } = data;
 
   if (
     !fullName ||
@@ -110,16 +91,11 @@ const registerUser = async (data) => {
   const age = calculateAge(dob);
 
   if (age < 16) {
-    throw new Error(
-      "You must be at least 16 years old to register"
-    );
+    throw new Error("You must be at least 16 years old to register");
   }
 
   const existingUser = await User.findOne({
-    $or: [
-      { email: normalizedEmail },
-      { mobile },
-    ],
+    $or: [{ email: normalizedEmail }, { mobile }],
   }).select("email mobile");
 
   if (existingUser) {
@@ -132,10 +108,7 @@ const registerUser = async (data) => {
     }
   }
 
-  const hashedPassword = await bcrypt.hash(
-    password,
-    10
-  );
+  const hashedPassword = await bcrypt.hash(password, 10);
 
   try {
     const user = await User.create({
@@ -199,17 +172,11 @@ const loginUser = async (email, password) => {
     throw new Error("Your account has been blocked");
   }
 
-  if (
-    user.authProvider === "google" &&
-    !user.password
-  ) {
+  if (user.authProvider === "google" && !user.password) {
     throw new Error("This account uses Google login");
   }
 
-  const isPasswordValid = await bcrypt.compare(
-    password,
-    user.password
-  );
+  const isPasswordValid = await bcrypt.compare(password, user.password);
 
   if (!isPasswordValid) {
     throw new Error("Invalid email or password");
@@ -224,68 +191,39 @@ const loginUser = async (email, password) => {
 };
 
 const googleLogin = async (idToken) => {
-  if (
-    typeof idToken !== "string" ||
-    !idToken.trim()
-  ) {
-    throw new Error(
-      "Google ID token is required"
-    );
+  if (typeof idToken !== "string" || !idToken.trim()) {
+    throw new Error("Google ID token is required");
   }
 
   let decodedToken;
 
   try {
-    decodedToken =
-      await getAuth(firebaseApp).verifyIdToken(
-        idToken
-      );
+    decodedToken = await getAuth(firebaseApp).verifyIdToken(idToken);
   } catch (error) {
-    console.error(
-      "Firebase token verification error:",
-      error
-    );
+    console.error("Firebase token verification error:", error);
 
-    throw new Error(
-      "Invalid Google authentication token"
-    );
+    throw new Error("Invalid Google authentication token");
   }
 
-  const {
-    uid,
-    email,
-    name,
-    picture,
-    email_verified,
-  } = decodedToken;
+  const { uid, email, name, picture, email_verified } = decodedToken;
 
   if (!email) {
-    throw new Error(
-      "Google account email is required"
-    );
+    throw new Error("Google account email is required");
   }
 
   if (!email_verified) {
-    throw new Error(
-      "Google email is not verified"
-    );
+    throw new Error("Google email is not verified");
   }
 
-  const normalizedEmail =
-    normalizeEmail(email);
+  const normalizedEmail = normalizeEmail(email);
 
   let user = await User.findOne({
-    $or: [
-      { firebaseUid: uid },
-      { email: normalizedEmail },
-    ],
+    $or: [{ firebaseUid: uid }, { email: normalizedEmail }],
   });
 
   if (user) {
     if (user.status === "blocked") {
-      throw new Error(
-        "Your account has been blocked"
-      );
+      throw new Error("Your account has been blocked");
     }
 
     let shouldSave = false;
@@ -295,10 +233,7 @@ const googleLogin = async (idToken) => {
       shouldSave = true;
     }
 
-    if (
-      user.authProvider !== "google" &&
-      !user.password
-    ) {
+    if (user.authProvider !== "google" && !user.password) {
       user.authProvider = "google";
       shouldSave = true;
     }
@@ -330,10 +265,7 @@ const googleLogin = async (idToken) => {
     } catch (error) {
       if (error?.code === 11000) {
         user = await User.findOne({
-          $or: [
-            { firebaseUid: uid },
-            { email: normalizedEmail },
-          ],
+          $or: [{ firebaseUid: uid }, { email: normalizedEmail }],
         });
 
         if (!user) {
@@ -341,9 +273,7 @@ const googleLogin = async (idToken) => {
         }
 
         if (user.status === "blocked") {
-          throw new Error(
-            "Your account has been blocked"
-          );
+          throw new Error("Your account has been blocked");
         }
       } else {
         throw error;
@@ -358,11 +288,7 @@ const googleLogin = async (idToken) => {
       ...getPublicUser(user),
       profileImage: picture || null,
       profileCompleted: Boolean(
-        user.mobile &&
-        user.dob &&
-        user.gender &&
-        user.city &&
-        user.state
+        user.mobile && user.dob && user.gender && user.city && user.state,
       ),
     },
     token,
@@ -375,18 +301,17 @@ const forgotPassword = async (email) => {
   }
 
   const normalizedEmail = normalizeEmail(email);
+const user = await User.findOne({
+  email: normalizedEmail,
+}).select("+email +fullName +status");
 
-  const user = await User.findOne({
-    email: normalizedEmail,
-  }).select("+email fullName status");
+  if (!user) {
+    throw new Error("Email is not registered");
+  }
 
-if (!user) {
-  throw new Error("Email is not registered");
-}
-
-if (user.status === "blocked") {
-  throw new Error("Your account has been blocked");
-}
+  if (user.status === "blocked") {
+    throw new Error("Your account has been blocked");
+  }
 
   const resetToken = crypto.randomBytes(32).toString("hex");
 
@@ -396,9 +321,7 @@ if (user.status === "blocked") {
     .digest("hex");
 
   user.resetPasswordToken = hashedToken;
-  user.resetPasswordExpires = new Date(
-    Date.now() + 15 * 60 * 1000
-  );
+  user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000);
 
   await user.save({
     validateBeforeSave: false,
@@ -412,17 +335,9 @@ if (user.status === "blocked") {
   };
 };
 
-const resetPassword = async (
-  token,
-  newPassword
-) => {
-  if (
-    typeof token !== "string" ||
-    !token.trim()
-  ) {
-    throw new Error(
-      "Reset token is required"
-    );
+const resetPassword = async (token, newPassword) => {
+  if (typeof token !== "string" || !token.trim()) {
+    throw new Error("Reset token is required");
   }
 
   validatePassword(newPassword);
@@ -442,19 +357,14 @@ const resetPassword = async (
   });
 
   if (!user) {
-    throw new Error(
-      "Invalid or expired reset link"
-    );
+    throw new Error("Invalid or expired reset link");
   }
 
   if (user.status === "blocked") {
-    throw new Error(
-      "Your account has been blocked"
-    );
+    throw new Error("Your account has been blocked");
   }
 
-  const hashedPassword =
-    await bcrypt.hash(newPassword, 12);
+  const hashedPassword = await bcrypt.hash(newPassword, 12);
 
   user.password = hashedPassword;
   user.authProvider = "local";

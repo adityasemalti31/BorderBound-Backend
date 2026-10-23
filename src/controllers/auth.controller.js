@@ -107,11 +107,14 @@ const forgotPasswordController = async (req, res) => {
   try {
     const { email } = req.body || {};
 
+
+    console.log("This is email", email)
+
     const result = await forgotPassword(email);
 
     if (result.shouldSendEmail) {
       const baseUrl = (
-        process.env.FRONTEND_URL || "http://localhost:5173"
+        process.env.FRONTEND_URL || "https://theborderbound.in"
       ).replace(/\/+$/, "");
 
       const resetLink = `${baseUrl}/reset-password?token=${encodeURIComponent(
@@ -124,7 +127,8 @@ const forgotPasswordController = async (req, res) => {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
-
+console.log("RESULT OBJECT:", result);
+console.log("RESULT EMAIL:", result.email);
       await sendEmail({
         to: result.email,
         subject: "Reset Your BorderBound Password",
