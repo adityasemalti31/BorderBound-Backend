@@ -156,13 +156,27 @@ const createOrUpdateProfile = async (userId, profileData) => {
     throw new Error("Contestant must be at least 16 years old.");
   }
 
-  const generateSlug = (name) => {
-    return name
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-  };
+  const generateUniqueSlug = async (name, excludeId = null) => {
+  const baseSlug = name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  let slug = baseSlug;
+  let count = 2;
+
+  while (
+    await ContestantProfile.exists({
+      slug,
+      ...(excludeId ? { _id: { $ne: excludeId } } : {}),
+    })
+  ) {
+    slug = `${baseSlug}-${count++}`;
+  }
+
+  return slug;
+};
 
   const finalFullName = fullName?.trim() || user.fullName;
 
