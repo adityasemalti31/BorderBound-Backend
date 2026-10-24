@@ -3,7 +3,11 @@ const User = require("../models/user.model");
 const SystemConfig = require("../models/systemConfig.model");
 const Payment = require("../models/payment.model");
 const { getRegistrationFeeInfo } = require("../utils/dateUtils");
-const { createPayment, verifyPayUResponseHash } = require("./payment.service");
+const {
+  createPayment,
+  verifyPayUResponseHash,
+  verifyPayUPaymentWithServer,
+} = require("./payment.service");
 const { uploadFile } = require("./upload.service");
 
 
@@ -400,13 +404,6 @@ const verifyRegistrationFee = async (userId, paymentData) => {
     throw new Error("Invalid PayU payment response.");
   }
 
-  const isValidHash = verifyPayUResponseHash(paymentData);
-
-  if (!isValidHash) {
-    console.error("PayU hash verification failed:", { txnid });
-    throw new Error("Payment verification failed.");
-  }
-
   const payment = await Payment.findOne({ txnid });
 
   if (!payment) {
@@ -414,13 +411,35 @@ const verifyRegistrationFee = async (userId, paymentData) => {
     throw new Error("Payment transaction not found.");
   }
 
-  if (String(payment.userId) !== String(userId)) {
+  const effectiveUserId = userId || payment.userId;
+
+  if (payment.userId && String(payment.userId) !== String(effectiveUserId)) {
     console.error("PayU user mismatch:", { txnid });
     throw new Error("Payment does not belong to this user.");
   }
 
   if (String(payment.type) !== "registration") {
     throw new Error("This is not a contestant registration payment.");
+  }
+
+  let isValidHash = verifyPayUResponseHash(paymentData);
+
+  // If local response hash check fails, query PayU directly before rejecting
+  if (!isValidHash) {
+    console.warn(
+      "PayU local hash verification mismatch, checking directly with PayU server:",
+      { txnid }
+    );
+    const serverCheck = await verifyPayUPaymentWithServer(txnid);
+    if (serverCheck.verified) {
+      isValidHash = true;
+      console.info("PayU server verified the transaction successfully:", { txnid });
+    }
+  }
+
+  if (!isValidHash) {
+    console.error("PayU hash verification failed:", { txnid });
+    throw new Error("Payment verification failed.");
   }
 
   if (String(status).toLowerCase() !== "success") {
@@ -444,17 +463,17 @@ const verifyRegistrationFee = async (userId, paymentData) => {
     throw new Error("Contestant profile not found.");
   }
 
-  if (String(profile.userId) !== String(userId)) {
+  if (profile.userId && String(profile.userId) !== String(effectiveUserId)) {
     throw new Error("Contestant profile does not belong to this user.");
   }
 
   // Update the payment record only if it has not been verified already.
   if (payment.status !== "success") {
     payment.status = "success";
-    payment.mihpayid = mihpayid || null;
-    payment.paymentMode = paymentData.mode || null;
+    payment.mihpayid = mihpayid || payment.mihpayid || null;
+    payment.paymentMode = paymentData.mode || payment.paymentMode || null;
     payment.bankReferenceNumber =
-      paymentData.bank_ref_num || null;
+      paymentData.bank_ref_num || payment.bankReferenceNumber || null;
     payment.rawResponse = paymentData;
 
     await payment.save();
@@ -463,7 +482,9 @@ const verifyRegistrationFee = async (userId, paymentData) => {
   // Always synchronize the profile, even for an already-successful payment.
   profile.registrationFeePaid = true;
   profile.registrationPaymentId = payment._id;
-  profile.status = "pending_review";
+  if (profile.status === "pending_payment" || profile.status === "draft") {
+    profile.status = "pending_review";
+  }
 
   if (!profile.registrationConfirmationEmailSent) {
     try {
@@ -500,15 +521,162 @@ const verifyRegistrationFee = async (userId, paymentData) => {
   };
 };
 
+const verifyAndSyncRegistrationPayment = async (txnid, userId = null) => {
+  if (!txnid) {
+    throw new Error("Transaction ID is required.");
+  }
+
+  const payment = await Payment.findOne({ txnid, type: "registration" });
+  if (!payment) {
+    throw new Error("Registration payment record not found.");
+  }
+
+  if (userId && payment.userId && String(payment.userId) !== String(userId)) {
+    throw new Error("Payment does not belong to this user.");
+  }
+
+  const profile = await ContestantProfile.findById(payment.contestantId);
+  if (!profile) {
+    throw new Error("Contestant profile not found for payment.");
+  }
+
+  if (payment.status === "success") {
+    if (!profile.registrationFeePaid || profile.status === "pending_payment" || profile.status === "draft") {
+      profile.registrationFeePaid = true;
+      profile.registrationPaymentId = payment._id;
+      if (profile.status === "pending_payment" || profile.status === "draft") {
+        profile.status = "pending_review";
+      }
+      await profile.save();
+    }
+    return {
+      success: true,
+      verified: true,
+      status: profile.status,
+      applicationId: profile.applicationId,
+      message: "Payment is verified and profile is confirmed.",
+    };
+  }
+
+  // Payment is in created/pending status. Query PayU server directly!
+  const serverCheck = await verifyPayUPaymentWithServer(txnid);
+
+  if (serverCheck.verified) {
+    payment.status = "success";
+    payment.mihpayid = serverCheck.mihpayid || payment.mihpayid || null;
+    payment.paymentMode = serverCheck.mode || payment.paymentMode || null;
+    payment.bankReferenceNumber =
+      serverCheck.bank_ref_num || payment.bankReferenceNumber || null;
+    payment.rawResponse = serverCheck.raw || payment.rawResponse;
+    await payment.save();
+
+    profile.registrationFeePaid = true;
+    profile.registrationPaymentId = payment._id;
+    if (profile.status === "pending_payment" || profile.status === "draft") {
+      profile.status = "pending_review";
+    }
+
+    if (!profile.registrationConfirmationEmailSent) {
+      try {
+        await sendCandidateRegistrationSuccessEmail({
+          to: profile.email,
+          fullName: profile.fullName,
+          applicationId: profile.applicationId,
+        });
+        profile.registrationConfirmationEmailSent = true;
+      } catch (emailError) {
+        console.error("Candidate registration email failed:", emailError.message);
+      }
+    }
+
+    await profile.save();
+
+    console.info("Registration payment successfully reconciled with PayU server:", {
+      txnid,
+      applicationId: profile.applicationId,
+    });
+
+    return {
+      success: true,
+      verified: true,
+      status: profile.status,
+      applicationId: profile.applicationId,
+      message: "Payment successfully verified directly from PayU.",
+    };
+  }
+
+  return {
+    success: false,
+    verified: false,
+    paymentStatus: payment.status,
+    payuStatus: serverCheck.status || null,
+    message:
+      serverCheck.message ||
+      "Payment has not been confirmed by PayU yet. If you have been debited, please check back in a few minutes.",
+  };
+};
+
 
 // Get My Profile Dashboard (Step 7)
 const getMyProfile = async (userId) => {
-  const profile = await ContestantProfile.findOne({ userId }).populate(
+  let profile = await ContestantProfile.findOne({ userId }).populate(
     "registrationPaymentId",
   );
   if (!profile) {
     return null;
   }
+
+  // Self-healing: If fee is marked unpaid or pending, check if PayU has confirmed payment
+  if (!profile.registrationFeePaid || profile.status === "pending_payment") {
+    try {
+      const latestPayment = await Payment.findOne({
+        contestantId: profile._id,
+        type: "registration",
+      }).sort({ createdAt: -1 });
+
+      if (latestPayment) {
+        if (latestPayment.status === "success") {
+          profile.registrationFeePaid = true;
+          profile.registrationPaymentId = latestPayment._id;
+          if (profile.status === "pending_payment" || profile.status === "draft") {
+            profile.status = "pending_review";
+          }
+          await profile.save();
+        } else if (
+          latestPayment.status === "created" ||
+          latestPayment.status === "pending"
+        ) {
+          const serverCheck = await verifyPayUPaymentWithServer(latestPayment.txnid);
+          if (serverCheck.verified) {
+            latestPayment.status = "success";
+            latestPayment.mihpayid = serverCheck.mihpayid || null;
+            latestPayment.paymentMode = serverCheck.mode || null;
+            latestPayment.bankReferenceNumber = serverCheck.bank_ref_num || null;
+            latestPayment.rawResponse = serverCheck.raw || null;
+            await latestPayment.save();
+
+            profile.registrationFeePaid = true;
+            profile.registrationPaymentId = latestPayment._id;
+            if (profile.status === "pending_payment" || profile.status === "draft") {
+              profile.status = "pending_review";
+            }
+            await profile.save();
+
+            console.info("Auto-reconciled registration payment for user:", {
+              userId: String(userId),
+              txnid: latestPayment.txnid,
+            });
+          }
+        }
+      }
+    } catch (checkErr) {
+      console.warn(
+        "Self-healing registration payment check notice in getMyProfile:",
+        checkErr.message
+      );
+    }
+  }
+
   return profile;
 };
 
@@ -637,5 +805,6 @@ module.exports = {
   getPublicContestants,
   getPublicContestantById,
   sendPendingPaymentReminders,
-  updateProfilePhoto
+  updateProfilePhoto,
+  verifyAndSyncRegistrationPayment,
 };

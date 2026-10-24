@@ -10,7 +10,8 @@ const {
   fetchMyProfile,
   fetchPublicContestants,
   fetchPublicContestantById,
-  handleUpdateProfilePhoto
+  handleUpdateProfilePhoto,
+  checkRegistrationPaymentStatus,
 } = require("../controllers/contestant.controller");
 const { protect } = require("../middleware/auth.middleware");
 const upload = require("../middleware/upload.middleware");
@@ -29,6 +30,10 @@ router.get("/public/:id", fetchPublicContestantById);
 // PayU Public Callback Webhooks
 router.post("/payu/success", handlePayUSuccess);
 router.post("/payu/failure", handlePayUFailure);
+
+// Public payment status check fallback (allows checking by txnid)
+router.get("/payment-status/:txnid", checkRegistrationPaymentStatus);
+router.post("/verify-status", checkRegistrationPaymentStatus);
 
 // Protected contestant endpoints
 router.use(protect);

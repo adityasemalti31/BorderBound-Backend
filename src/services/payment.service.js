@@ -1,14 +1,14 @@
 const crypto = require("crypto");
 const Payment = require("../models/payment.model");
 
-const PAYU_KEY = process.env.PAYU_KEY;
-const PAYU_SALT = process.env.PAYU_SALT;
+const PAYU_KEY = (process.env.PAYU_KEY || "").trim();
+const PAYU_SALT = (process.env.PAYU_SALT || "").trim();
 
 const PAYU_PAYMENT_URL =
-  process.env.PAYU_PAYMENT_URL || "https://secure.payu.in/_payment";
+  (process.env.PAYU_PAYMENT_URL || "https://secure.payu.in/_payment").trim();
 
 const BACKEND_URL =
-  process.env.BACKEND_URL || "https://borderbound-backend.onrender.com";
+  (process.env.BACKEND_URL || "https://borderbound-backend.onrender.com").trim();
 
 if (!PAYU_KEY || !PAYU_SALT) {
   throw new Error(
@@ -317,6 +317,9 @@ const verifyPayUResponseHash = (data) => {
     hash = "",
   } = data;
 
+  const additionalCharges =
+    data.additionalCharges || data.additional_charges || "";
+
   if (
     !status ||
     !txnid ||
@@ -329,46 +332,149 @@ const verifyPayUResponseHash = (data) => {
   }
 
   let formattedAmount;
-
   try {
     formattedAmount = normalizeAmount(amount);
   } catch {
-    return false;
+    formattedAmount = String(amount).trim();
   }
 
   const normalizedStatus = normalizeString(status, 100);
-
   const normalizedTxnId = normalizeString(txnid, 100);
-
   const normalizedUdf5 = normalizeString(udf5, 255);
-
   const normalizedUdf4 = normalizeString(udf4, 255);
-
   const normalizedUdf3 = normalizeString(udf3, 255);
-
   const normalizedUdf2 = normalizeString(udf2, 255);
-
   const normalizedUdf1 = normalizeString(udf1, 255);
-
   const normalizedEmail = normalizeString(email, 255);
-
   const normalizedFirstname = normalizeString(firstname, 150);
-
   const normalizedProductInfo = normalizeString(productinfo, 255);
+  const rawAmount = String(amount).trim();
 
-  const reverseHashString =
-    `${PAYU_SALT}|${normalizedStatus}||||||${normalizedUdf5}|${normalizedUdf4}|${normalizedUdf3}|${normalizedUdf2}|${normalizedUdf1}|` +
-    `${normalizedEmail}|${normalizedFirstname}|${normalizedProductInfo}|${formattedAmount}|${normalizedTxnId}|${PAYU_KEY}`;
+  // Test amount variations: normalized ("50.00") and raw as returned by PayU
+  const amountCandidates = Array.from(new Set([formattedAmount, rawAmount]));
 
-  const generatedHash = crypto
+  for (const amt of amountCandidates) {
+    // 1. Check with additionalCharges (PayU standard when convenience fee, cards, or surcharge apply)
+    if (additionalCharges) {
+      const normalizedAdditionalCharges = normalizeString(additionalCharges, 100);
+      const withChargesHashString =
+        `${normalizedAdditionalCharges}|${PAYU_SALT}|${normalizedStatus}||||||${normalizedUdf5}|${normalizedUdf4}|${normalizedUdf3}|${normalizedUdf2}|${normalizedUdf1}|` +
+        `${normalizedEmail}|${normalizedFirstname}|${normalizedProductInfo}|${amt}|${normalizedTxnId}|${PAYU_KEY}`;
+
+      const hashWithCharges = crypto
+        .createHash("sha512")
+        .update(withChargesHashString, "utf8")
+        .digest("hex");
+
+      if (safeHashCompare(hashWithCharges, hash)) {
+        return true;
+      }
+    }
+
+    // 2. Standard PayU reverse hash (without additional charges)
+    const standardReverseHashString =
+      `${PAYU_SALT}|${normalizedStatus}||||||${normalizedUdf5}|${normalizedUdf4}|${normalizedUdf3}|${normalizedUdf2}|${normalizedUdf1}|` +
+      `${normalizedEmail}|${normalizedFirstname}|${normalizedProductInfo}|${amt}|${normalizedTxnId}|${PAYU_KEY}`;
+
+    const hashStandard = crypto
+      .createHash("sha512")
+      .update(standardReverseHashString, "utf8")
+      .digest("hex");
+
+    if (safeHashCompare(hashStandard, hash)) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+// --------------------------------------------------
+// Server-to-Server PayU Verification API (Fallback & Reconcile)
+// Queries PayU directly via their official postservice Web Service
+// --------------------------------------------------
+
+const verifyPayUPaymentWithServer = async (txnid) => {
+  if (!txnid) {
+    return {
+      success: false,
+      verified: false,
+      message: "Transaction ID is required for verification.",
+    };
+  }
+
+  const isTest = PAYU_PAYMENT_URL.includes("test.payu.in");
+  const postServiceUrl = isTest
+    ? "https://test.payu.in/merchant/postservice.php?form=2"
+    : "https://info.payu.in/merchant/postservice.php?form=2";
+
+  const command = "verify_payment";
+  const hashString = `${PAYU_KEY}|${command}|${txnid}|${PAYU_SALT}`;
+  const hash = crypto
     .createHash("sha512")
-    .update(reverseHashString, "utf8")
+    .update(hashString, "utf8")
     .digest("hex");
 
-  return safeHashCompare(generatedHash, hash);
+  const formData = new URLSearchParams({
+    key: PAYU_KEY,
+    command,
+    var1: txnid,
+    hash,
+  });
+
+  try {
+    const response = await fetch(postServiceUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: formData.toString(),
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `PayU postservice responded with HTTP status ${response.status}`,
+      );
+    }
+
+    const result = await response.json();
+    const txnDetails = result?.transaction_details?.[txnid];
+
+    if (!txnDetails) {
+      return {
+        success: false,
+        verified: false,
+        message: result?.msg || "Transaction record not found on PayU.",
+        raw: result,
+      };
+    }
+
+    const isSuccess =
+      String(txnDetails.status).toLowerCase() === "success";
+
+    return {
+      success: true,
+      verified: isSuccess,
+      status: txnDetails.status,
+      mihpayid: txnDetails.mihpayid || null,
+      mode: txnDetails.mode || null,
+      bank_ref_num: txnDetails.bank_ref_num || null,
+      amount: txnDetails.amount,
+      raw: txnDetails,
+    };
+  } catch (error) {
+    console.error("PayU server verification check error:", error.message);
+    return {
+      success: false,
+      verified: false,
+      error: error.message,
+    };
+  }
 };
 
 module.exports = {
   createPayment,
   verifyPayUResponseHash,
+  verifyPayUPaymentWithServer,
 };

@@ -6,7 +6,11 @@ const VoteTransaction = require("../models/voteTransaction.model");
 const Payment = require("../models/payment.model");
 
 const { getVotingStatusInfo } = require("../utils/dateUtils");
-const { createPayment, verifyPayUResponseHash } = require("./payment.service");
+const {
+  createPayment,
+  verifyPayUResponseHash,
+  verifyPayUPaymentWithServer,
+} = require("./payment.service");
 
 const MAX_VOTES_PER_ORDER = 1000;
 
@@ -257,7 +261,24 @@ const verifyVotePayment = async (paymentData) => {
     throw new Error("Invalid PayU payment response.");
   }
 
-  const isValidHash = verifyPayUResponseHash(paymentData);
+  let isValidHash =
+    hash === "verified_via_server_api" || verifyPayUResponseHash(paymentData);
+
+  // If local response hash check fails, query PayU directly before rejecting
+  if (!isValidHash) {
+    console.warn(
+      "PayU local hash verification mismatch for vote order, checking directly with PayU server:",
+      { txnid }
+    );
+    const serverCheck = await verifyPayUPaymentWithServer(txnid);
+    if (serverCheck.verified) {
+      isValidHash = true;
+      console.info(
+        "PayU server verified the vote transaction successfully:",
+        { txnid }
+      );
+    }
+  }
 
   if (!isValidHash) {
     throw new Error("Payment verification failed.");
@@ -588,8 +609,59 @@ const verifyVotePayment = async (paymentData) => {
   );
 };
 
+const verifyAndSyncVotePayment = async (txnid) => {
+  if (!txnid) {
+    throw new Error("Transaction ID is required.");
+  }
+
+  const payment = await Payment.findOne({ txnid, type: "voting" });
+  if (!payment) {
+    throw new Error("Vote payment record not found.");
+  }
+
+  if (payment.status === "success") {
+    const existingTransaction = await VoteTransaction.findOne({
+      paymentId: payment._id,
+    })
+      .select("_id")
+      .lean();
+
+    return buildVoteResult(
+      payment.contestantId,
+      "Payment already verified.",
+      existingTransaction?._id || null
+    );
+  }
+
+  // If created or pending, ask PayU server directly
+  const serverCheck = await verifyPayUPaymentWithServer(txnid);
+
+  if (serverCheck.verified) {
+    return await verifyVotePayment({
+      txnid,
+      status: "success",
+      amount: payment.amount,
+      mihpayid: serverCheck.mihpayid || null,
+      mode: serverCheck.mode || null,
+      bank_ref_num: serverCheck.bank_ref_num || null,
+      hash: "verified_via_server_api",
+    });
+  }
+
+  return {
+    success: false,
+    verified: false,
+    paymentStatus: payment.status,
+    payuStatus: serverCheck.status || null,
+    message:
+      serverCheck.message ||
+      "Payment has not been confirmed by PayU yet.",
+  };
+};
+
 module.exports = {
   getVotingPackages,
   createVoteOrder,
   verifyVotePayment,
+  verifyAndSyncVotePayment,
 };

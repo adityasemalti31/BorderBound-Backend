@@ -4,6 +4,7 @@ const {
   acceptTerms,
   initiateRegistrationFee,
   verifyRegistrationFee,
+  verifyAndSyncRegistrationPayment,
   getMyProfile,
   getPublicContestants,
   getPublicContestantById,
@@ -115,19 +116,34 @@ const initiateRegistrationPayment = async (req, res) => {
   }
 };
 
-const FRONTEND_URL = "https://borderbound.vercel.app";
+const FRONTEND_URL =
+  process.env.FRONTEND_URL || "https://borderbound.vercel.app";
+
+const isHtmlBrowserRedirect = (req) => {
+  const accept = req.headers.accept || "";
+  return (
+    accept.includes("text/html") ||
+    req.headers["sec-fetch-dest"] === "document" ||
+    req.headers["sec-fetch-mode"] === "navigate"
+  );
+};
 
 const handlePayUSuccess = async (req, res) => {
-  try {
-    const userId = req.body.udf1;
+  const isRedirect = isHtmlBrowserRedirect(req);
+  const txnid = req.body?.txnid || "";
 
-    if (!userId) {
-      if (req.headers.accept?.includes("text/html") || req.method === "POST") {
-        return res.redirect(`${FRONTEND_URL}/dashboard?payment=failed&reason=User%20ID%20missing`);
+  try {
+    const userId = req.body.udf1 || null;
+
+    if (!txnid) {
+      if (isRedirect) {
+        return res.redirect(
+          `${FRONTEND_URL}/dashboard?payment=failed&reason=Transaction%20ID%20missing`
+        );
       }
       return res.status(400).json({
         success: false,
-        message: "User identification missing.",
+        message: "Transaction ID missing from PayU response.",
       });
     }
 
@@ -136,50 +152,90 @@ const handlePayUSuccess = async (req, res) => {
       req.body
     );
 
-    if (req.headers.accept?.includes("text/html") || req.headers["content-type"]?.includes("application/x-www-form-urlencoded")) {
-      return res.redirect(`${FRONTEND_URL}/dashboard?payment=success&txnid=${req.body.txnid || ""}`);
+    if (isRedirect) {
+      return res.redirect(
+        `${FRONTEND_URL}/dashboard?payment=success&txnid=${encodeURIComponent(
+          txnid
+        )}`
+      );
     }
 
-    res.status(200).json(result);
+    return res.status(200).json(result);
   } catch (error) {
     console.error("PayU success callback error:", error);
 
-    if (req.headers.accept?.includes("text/html") || req.headers["content-type"]?.includes("application/x-www-form-urlencoded")) {
-      return res.redirect(`${FRONTEND_URL}/dashboard?payment=failed&reason=${encodeURIComponent(error.message)}`);
+    if (isRedirect) {
+      return res.redirect(
+        `${FRONTEND_URL}/dashboard?payment=failed&reason=${encodeURIComponent(
+          error.message || "Payment verification failed"
+        )}`
+      );
     }
 
-    res.status(400).json({
+    return res.status(400).json({
       success: false,
-      message: error.message,
+      message: error.message || "Payment verification failed",
     });
   }
 };
 
 const handlePayUFailure = async (req, res) => {
+  const isRedirect = isHtmlBrowserRedirect(req);
+
   try {
-    const userId = req.body.udf1 || req.body.userId;
+    const userId = req.body.udf1 || req.body.userId || null;
     if (userId) {
       await verifyRegistrationFee(userId, req.body).catch(() => {});
     }
 
-    if (req.headers.accept?.includes("text/html") || req.headers["content-type"]?.includes("application/x-www-form-urlencoded")) {
-      return res.redirect(`${FRONTEND_URL}/dashboard?payment=failed&reason=Payment%20failed`);
+    if (isRedirect) {
+      return res.redirect(
+        `${FRONTEND_URL}/dashboard?payment=failed&reason=Payment%20failed%20or%20cancelled`
+      );
     }
 
-    res.status(400).json({
+    return res.status(400).json({
       success: false,
       message: "PayU payment failed or was cancelled.",
     });
   } catch (error) {
     console.error("PayU failure callback:", error);
 
-    if (req.headers.accept?.includes("text/html") || req.headers["content-type"]?.includes("application/x-www-form-urlencoded")) {
-      return res.redirect(`${FRONTEND_URL}/dashboard?payment=failed&reason=${encodeURIComponent(error.message)}`);
+    if (isRedirect) {
+      return res.redirect(
+        `${FRONTEND_URL}/dashboard?payment=failed&reason=${encodeURIComponent(
+          error.message || "Payment failed"
+        )}`
+      );
     }
 
-    res.status(400).json({
+    return res.status(400).json({
       success: false,
       message: error.message,
+    });
+  }
+};
+
+const checkRegistrationPaymentStatus = async (req, res) => {
+  try {
+    const txnid =
+      req.params.txnid || req.query.txnid || req.body?.txnid;
+    const userId = req.user?._id || null;
+
+    if (!txnid) {
+      return res.status(400).json({
+        success: false,
+        message: "Transaction ID (txnid) is required.",
+      });
+    }
+
+    const result = await verifyAndSyncRegistrationPayment(txnid, userId);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Check registration payment status error:", error);
+    return res.status(400).json({
+      success: false,
+      message: error.message || "Unable to check payment status.",
     });
   }
 };
@@ -273,5 +329,6 @@ module.exports = {
   fetchMyProfile,
   fetchPublicContestants,
   fetchPublicContestantById,
-  handleUpdateProfilePhoto
+  handleUpdateProfilePhoto,
+  checkRegistrationPaymentStatus,
 };

@@ -1,11 +1,12 @@
 
 const FRONTEND_URL =
-  process.env.FRONTEND_URL 
+  process.env.FRONTEND_URL || "https://borderbound.vercel.app";
 
 const {
   getVotingPackages,
   createVoteOrder,
   verifyVotePayment,
+  verifyAndSyncVotePayment,
 } = require("../services/voting.service");
 
 const getClientIp = (req) => {
@@ -17,17 +18,11 @@ const getClientIp = (req) => {
 };
 
 const isPayURedirectRequest = (req) => {
-  const accept =
-    req.headers.accept || "";
-
-  const contentType =
-    req.headers["content-type"] || "";
-
+  const accept = req.headers.accept || "";
   return (
     accept.includes("text/html") ||
-    contentType.includes(
-      "application/x-www-form-urlencoded"
-    )
+    req.headers["sec-fetch-dest"] === "document" ||
+    req.headers["sec-fetch-mode"] === "navigate"
   );
 };
 
@@ -368,10 +363,34 @@ const handlePayUVotingFailure = async (
   }
 };
 
+const checkVotePaymentStatus = async (req, res) => {
+  try {
+    const txnid =
+      req.params.txnid || req.query.txnid || req.body?.txnid;
+
+    if (!txnid) {
+      return res.status(400).json({
+        success: false,
+        message: "Transaction ID (txnid) is required.",
+      });
+    }
+
+    const result = await verifyAndSyncVotePayment(txnid);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Check vote payment status error:", error);
+    return res.status(400).json({
+      success: false,
+      message: error.message || "Unable to check vote payment status.",
+    });
+  }
+};
+
 module.exports = {
   fetchVotingPackages,
   initiateVoteOrder,
   confirmVotePayment,
   handlePayUVotingSuccess,
   handlePayUVotingFailure,
+  checkVotePaymentStatus,
 };
