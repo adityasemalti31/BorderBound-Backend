@@ -10,23 +10,17 @@ const {
 } = require("./payment.service");
 const { uploadFile } = require("./upload.service");
 
-
-const mongoose = require('mongoose')
+const mongoose = require("mongoose");
 const {
   sendCandidateRegistrationSuccessEmail,
 } = require("../utils/candidateEmails");
-
-
-
 
 const sendPendingPaymentReminders = async () => {
   const {
     sendCandidatePaymentReminderEmail,
   } = require("../utils/candidateEmails");
 
-  const twoDaysAgo = new Date(
-    Date.now() - 48 * 60 * 60 * 1000
-  );
+  const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
   const candidates = await ContestantProfile.find({
     status: "pending_payment",
@@ -37,9 +31,7 @@ const sendPendingPaymentReminders = async () => {
     },
   });
 
-  console.log(
-    `Found ${candidates.length} pending payment reminders.`
-  );
+  console.log(`Found ${candidates.length} pending payment reminders.`);
 
   for (const profile of candidates) {
     try {
@@ -55,13 +47,11 @@ const sendPendingPaymentReminders = async () => {
 
       await profile.save();
 
-      console.log(
-        `Payment reminder sent to ${profile.email}`
-      );
+      console.log(`Payment reminder sent to ${profile.email}`);
     } catch (error) {
       console.error(
         `Payment reminder failed for ${profile.email}:`,
-        error.message
+        error.message,
       );
     }
   }
@@ -75,7 +65,9 @@ const generateApplicationId = async () => {
 
   const lastProfile = await ContestantProfile.findOne({
     applicationId: { $regex: `^${prefix}\\d+$` },
-  }).sort({ applicationId: -1 }).select("applicationId");
+  })
+    .sort({ applicationId: -1 })
+    .select("applicationId");
 
   const lastNumber = lastProfile
     ? Number(lastProfile.applicationId.split("-").pop())
@@ -157,26 +149,26 @@ const createOrUpdateProfile = async (userId, profileData) => {
   }
 
   const generateSlug = async (name, excludeId = null) => {
-  const baseSlug = name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    const baseSlug = name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
 
-  let slug = baseSlug;
-  let count = 2;
+    let slug = baseSlug;
+    let count = 2;
 
-  while (
-    await ContestantProfile.exists({
-      slug,
-      ...(excludeId ? { _id: { $ne: excludeId } } : {}),
-    })
-  ) {
-    slug = `${baseSlug}-${count++}`;
-  }
+    while (
+      await ContestantProfile.exists({
+        slug,
+        ...(excludeId ? { _id: { $ne: excludeId } } : {}),
+      })
+    ) {
+      slug = `${baseSlug}-${count++}`;
+    }
 
-  return slug;
-};
+    return slug;
+  };
 
   const finalFullName = fullName?.trim() || user.fullName;
 
@@ -219,14 +211,14 @@ const createOrUpdateProfile = async (userId, profileData) => {
     profile.emergencyContact = emergencyContact;
 
     if (!profile.slug) {
-      profile.slug = generateSlug(finalFullName);
+      profile.slug = await generateSlug(finalFullName, profile._id);
     }
 
     await profile.save();
   } else {
     const applicationId = await generateApplicationId();
 
-    const slug = generateSlug(finalFullName);
+    const slug = await generateSlug(finalFullName);
 
     profile = await ContestantProfile.create({
       userId,
@@ -404,15 +396,8 @@ const initiateRegistrationFee = async (userId, ipAddress, userAgent) => {
   };
 };
 
-
-
 const verifyRegistrationFee = async (userId, paymentData) => {
-  const {
-    txnid,
-    mihpayid,
-    status,
-    hash,
-  } = paymentData;
+  const { txnid, mihpayid, status, hash } = paymentData;
 
   if (!txnid || !status || !hash) {
     throw new Error("Invalid PayU payment response.");
@@ -442,12 +427,14 @@ const verifyRegistrationFee = async (userId, paymentData) => {
   if (!isValidHash) {
     console.warn(
       "PayU local hash verification mismatch, checking directly with PayU server:",
-      { txnid }
+      { txnid },
     );
     const serverCheck = await verifyPayUPaymentWithServer(txnid);
     if (serverCheck.verified) {
       isValidHash = true;
-      console.info("PayU server verified the transaction successfully:", { txnid });
+      console.info("PayU server verified the transaction successfully:", {
+        txnid,
+      });
     }
   }
 
@@ -464,9 +451,7 @@ const verifyRegistrationFee = async (userId, paymentData) => {
     throw new Error("Payment was not successful.");
   }
 
-  const profile = await ContestantProfile.findById(
-    payment.contestantId
-  );
+  const profile = await ContestantProfile.findById(payment.contestantId);
 
   if (!profile) {
     console.error("Contestant profile not found for payment:", {
@@ -510,10 +495,7 @@ const verifyRegistrationFee = async (userId, paymentData) => {
 
       profile.registrationConfirmationEmailSent = true;
     } catch (emailError) {
-      console.error(
-        "Candidate registration email failed:",
-        emailError.message
-      );
+      console.error("Candidate registration email failed:", emailError.message);
     }
   }
 
@@ -555,7 +537,11 @@ const verifyAndSyncRegistrationPayment = async (txnid, userId = null) => {
   }
 
   if (payment.status === "success") {
-    if (!profile.registrationFeePaid || profile.status === "pending_payment" || profile.status === "draft") {
+    if (
+      !profile.registrationFeePaid ||
+      profile.status === "pending_payment" ||
+      profile.status === "draft"
+    ) {
       profile.registrationFeePaid = true;
       profile.registrationPaymentId = payment._id;
       if (profile.status === "pending_payment" || profile.status === "draft") {
@@ -599,16 +585,22 @@ const verifyAndSyncRegistrationPayment = async (txnid, userId = null) => {
         });
         profile.registrationConfirmationEmailSent = true;
       } catch (emailError) {
-        console.error("Candidate registration email failed:", emailError.message);
+        console.error(
+          "Candidate registration email failed:",
+          emailError.message,
+        );
       }
     }
 
     await profile.save();
 
-    console.info("Registration payment successfully reconciled with PayU server:", {
-      txnid,
-      applicationId: profile.applicationId,
-    });
+    console.info(
+      "Registration payment successfully reconciled with PayU server:",
+      {
+        txnid,
+        applicationId: profile.applicationId,
+      },
+    );
 
     return {
       success: true,
@@ -629,7 +621,6 @@ const verifyAndSyncRegistrationPayment = async (txnid, userId = null) => {
       "Payment has not been confirmed by PayU yet. If you have been debited, please check back in a few minutes.",
   };
 };
-
 
 // Get My Profile Dashboard (Step 7)
 const getMyProfile = async (userId) => {
@@ -652,7 +643,10 @@ const getMyProfile = async (userId) => {
         if (latestPayment.status === "success") {
           profile.registrationFeePaid = true;
           profile.registrationPaymentId = latestPayment._id;
-          if (profile.status === "pending_payment" || profile.status === "draft") {
+          if (
+            profile.status === "pending_payment" ||
+            profile.status === "draft"
+          ) {
             profile.status = "pending_review";
           }
           await profile.save();
@@ -660,18 +654,24 @@ const getMyProfile = async (userId) => {
           latestPayment.status === "created" ||
           latestPayment.status === "pending"
         ) {
-          const serverCheck = await verifyPayUPaymentWithServer(latestPayment.txnid);
+          const serverCheck = await verifyPayUPaymentWithServer(
+            latestPayment.txnid,
+          );
           if (serverCheck.verified) {
             latestPayment.status = "success";
             latestPayment.mihpayid = serverCheck.mihpayid || null;
             latestPayment.paymentMode = serverCheck.mode || null;
-            latestPayment.bankReferenceNumber = serverCheck.bank_ref_num || null;
+            latestPayment.bankReferenceNumber =
+              serverCheck.bank_ref_num || null;
             latestPayment.rawResponse = serverCheck.raw || null;
             await latestPayment.save();
 
             profile.registrationFeePaid = true;
             profile.registrationPaymentId = latestPayment._id;
-            if (profile.status === "pending_payment" || profile.status === "draft") {
+            if (
+              profile.status === "pending_payment" ||
+              profile.status === "draft"
+            ) {
               profile.status = "pending_review";
             }
             await profile.save();
@@ -686,7 +686,7 @@ const getMyProfile = async (userId) => {
     } catch (checkErr) {
       console.warn(
         "Self-healing registration payment check notice in getMyProfile:",
-        checkErr.message
+        checkErr.message,
       );
     }
   }
@@ -754,42 +754,40 @@ const getPublicContestantById = async (contestantId) => {
   return profile;
 };
 
-
 const updateProfilePhoto = async (userId, fileBuffer, originalName) => {
- const profile = await ContestantProfile.findOne({
-  userId: new mongoose.Types.ObjectId(userId),
-});
-
-if (!profile) {
-  const debug = await ContestantProfile.findOne({
-    applicationId: "BB-2026-00444",
-  }).select("_id userId applicationId fullName");
-
-  console.log("PHOTO DEBUG:", {
-    receivedUserId: userId,
-    database: ContestantProfile.db.name,
-    collection: ContestantProfile.collection.name,
-    foundByApplicationId: debug,
+  const profile = await ContestantProfile.findOne({
+    userId: new mongoose.Types.ObjectId(userId),
   });
 
-  throw new Error("Contestant profile not found. Check Render logs.");
-}
+  if (!profile) {
+    const debug = await ContestantProfile.findOne({
+      applicationId: "BB-2026-00444",
+    }).select("_id userId applicationId fullName");
+
+    console.log("PHOTO DEBUG:", {
+      receivedUserId: userId,
+      database: ContestantProfile.db.name,
+      collection: ContestantProfile.collection.name,
+      foundByApplicationId: debug,
+    });
+
+    throw new Error("Contestant profile not found. Check Render logs.");
+  }
   const uploadRes = await uploadFile(
     fileBuffer,
     originalName,
-    "borderbound_docs"
+    "borderbound_docs",
   );
 
   profile.profilePhotoUrl = uploadRes.url;
 
   const existingDocIndex = profile.documents.findIndex(
-    (doc) => doc.docType === "photograph"
+    (doc) => doc.docType === "photograph",
   );
 
   if (existingDocIndex > -1) {
     profile.documents[existingDocIndex].url = uploadRes.url;
-    profile.documents[existingDocIndex].publicId =
-      uploadRes.publicId;
+    profile.documents[existingDocIndex].publicId = uploadRes.publicId;
     profile.documents[existingDocIndex].status = "pending";
     profile.documents[existingDocIndex].uploadedAt = new Date();
   } else {
@@ -806,8 +804,6 @@ if (!profile) {
 
   return profile;
 };
-
-
 
 module.exports = {
   createOrUpdateProfile,
