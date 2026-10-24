@@ -156,7 +156,7 @@ const createOrUpdateProfile = async (userId, profileData) => {
     throw new Error("Contestant must be at least 16 years old.");
   }
 
-  const generateUniqueSlug = async (name, excludeId = null) => {
+  const generateSlug = async (name, excludeId = null) => {
   const baseSlug = name
     .toLowerCase()
     .trim()
