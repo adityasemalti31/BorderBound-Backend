@@ -10,11 +10,11 @@ const {
 } = require("../services/voting.service");
 
 const getClientIp = (req) => {
-  return (
-    req.ip ||
-    req.headers["x-forwarded-for"] ||
-    "0.0.0.0"
-  );
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) {
+    return String(forwarded).split(",")[0].trim().slice(0, 100);
+  }
+  return String(req.ip || req.socket?.remoteAddress || "0.0.0.0").slice(0, 100);
 };
 
 const isPayURedirectRequest = (req) => {
@@ -278,12 +278,37 @@ const handlePayUVotingSuccess = async (req, res) => {
     console.error("PayU voting success callback error:", {
       txnid,
       status: body.status || null,
-      errorName: error.name,
       errorMessage: error.message,
-      errorCode: error.code || null,
-      errorLabels: error.errorLabels || [],
-      stack: error.stack,
     });
+
+    // Fallback: Query PayU server directly before redirecting to pending/failed
+    if (txnid) {
+      try {
+        const fallbackResult = await verifyAndSyncVotePayment(txnid);
+        if (fallbackResult && fallbackResult.success) {
+          console.info("PayU voting payment verified via server API fallback:", { txnid });
+
+          if (redirectRequest) {
+            const contestantId =
+              fallbackResult.contestant?.id || body.udf3 || "";
+            const redirectPath =
+              getContestantRedirectPath(contestantId);
+            const params = new URLSearchParams({
+              voting: "success",
+              ...(body.udf4 ? { votes: String(body.udf4) } : {}),
+              txnid,
+            });
+            return res.redirect(
+              `${FRONTEND_URL}${redirectPath}?${params.toString()}`
+            );
+          }
+
+          return res.status(200).json(fallbackResult);
+        }
+      } catch (fallbackError) {
+        console.error("Fallback PayU server check error:", fallbackError.message);
+      }
+    }
 
     if (redirectRequest) {
       const contestantId = body.udf3 || "";

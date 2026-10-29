@@ -353,36 +353,42 @@ const verifyPayUResponseHash = (data) => {
   // Test amount variations: normalized ("50.00") and raw as returned by PayU
   const amountCandidates = Array.from(new Set([formattedAmount, rawAmount]));
 
-  for (const amt of amountCandidates) {
-    // 1. Check with additionalCharges (PayU standard when convenience fee, cards, or surcharge apply)
-    if (additionalCharges) {
-      const normalizedAdditionalCharges = normalizeString(additionalCharges, 100);
-      const withChargesHashString =
-        `${normalizedAdditionalCharges}|${PAYU_SALT}|${normalizedStatus}||||||${normalizedUdf5}|${normalizedUdf4}|${normalizedUdf3}|${normalizedUdf2}|${normalizedUdf1}|` +
-        `${normalizedEmail}|${normalizedFirstname}|${normalizedProductInfo}|${amt}|${normalizedTxnId}|${PAYU_KEY}`;
+  const keyCandidates = Array.from(
+    new Set([PAYU_KEY, normalizeString(data.key, 100)].filter(Boolean))
+  );
 
-      const hashWithCharges = crypto
+  for (const keyToUse of keyCandidates) {
+    for (const amt of amountCandidates) {
+      // 1. Check with additionalCharges (PayU standard when convenience fee, cards, or surcharge apply)
+      if (additionalCharges) {
+        const normalizedAdditionalCharges = normalizeString(additionalCharges, 100);
+        const withChargesHashString =
+          `${normalizedAdditionalCharges}|${PAYU_SALT}|${normalizedStatus}||||||${normalizedUdf5}|${normalizedUdf4}|${normalizedUdf3}|${normalizedUdf2}|${normalizedUdf1}|` +
+          `${normalizedEmail}|${normalizedFirstname}|${normalizedProductInfo}|${amt}|${normalizedTxnId}|${keyToUse}`;
+
+        const hashWithCharges = crypto
+          .createHash("sha512")
+          .update(withChargesHashString, "utf8")
+          .digest("hex");
+
+        if (safeHashCompare(hashWithCharges, hash)) {
+          return true;
+        }
+      }
+
+      // 2. Standard PayU reverse hash (without additional charges)
+      const standardReverseHashString =
+        `${PAYU_SALT}|${normalizedStatus}||||||${normalizedUdf5}|${normalizedUdf4}|${normalizedUdf3}|${normalizedUdf2}|${normalizedUdf1}|` +
+        `${normalizedEmail}|${normalizedFirstname}|${normalizedProductInfo}|${amt}|${normalizedTxnId}|${keyToUse}`;
+
+      const hashStandard = crypto
         .createHash("sha512")
-        .update(withChargesHashString, "utf8")
+        .update(standardReverseHashString, "utf8")
         .digest("hex");
 
-      if (safeHashCompare(hashWithCharges, hash)) {
+      if (safeHashCompare(hashStandard, hash)) {
         return true;
       }
-    }
-
-    // 2. Standard PayU reverse hash (without additional charges)
-    const standardReverseHashString =
-      `${PAYU_SALT}|${normalizedStatus}||||||${normalizedUdf5}|${normalizedUdf4}|${normalizedUdf3}|${normalizedUdf2}|${normalizedUdf1}|` +
-      `${normalizedEmail}|${normalizedFirstname}|${normalizedProductInfo}|${amt}|${normalizedTxnId}|${PAYU_KEY}`;
-
-    const hashStandard = crypto
-      .createHash("sha512")
-      .update(standardReverseHashString, "utf8")
-      .digest("hex");
-
-    if (safeHashCompare(hashStandard, hash)) {
-      return true;
     }
   }
 

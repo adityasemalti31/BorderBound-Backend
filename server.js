@@ -4,6 +4,8 @@ const SystemConfig = require("./src/models/systemConfig.model");
 require("dotenv").config();
 const {startCandidateReminderJob} = require("./src/utils/reminder");
 
+const { startPaymentReconciliationCron } = require("./src/services/reconciliation.service");
+
 const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
@@ -18,8 +20,9 @@ const startServer = async () => {
     }
 
     app.listen(PORT, () => {
-       
       console.log(`Server running on port ${PORT}`);
+      // Start safe forward-only payment reconciliation watcher
+      startPaymentReconciliationCron();
       // startCandidateReminderJob();
     });
   } catch (error) {
