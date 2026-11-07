@@ -8,7 +8,8 @@ const {
   getMyProfile,
   getPublicContestants,
   getPublicContestantById,
-  updateProfilePhoto
+  updateProfilePhoto,
+  editContestantProfile
 } = require("../services/contestant.service");
 
 const saveProfile = async (req, res) => {
@@ -319,6 +320,47 @@ const handleUpdateProfilePhoto = async (req, res) => {
   }
 };
 
+
+
+const editContestantProfileController = async (req, res) => {
+  try {
+    console.log("BODY:", req.body);
+    console.log("FILES:", req.files);
+
+    const files = req.files
+      ? Object.values(req.files).flat()
+      : [];
+
+    console.log(
+      "FLATTENED FILES:",
+      files.map((file) => ({
+        fieldname: file.fieldname,
+        originalname: file.originalname,
+        size: file.size,
+      }))
+    );
+
+    const profile = await editContestantProfile(
+      req.user._id,
+      req.body,
+      files
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile updated successfully.",
+      data: profile,
+    });
+  } catch (error) {
+    console.error("EDIT PROFILE ERROR:", error);
+
+    return res.status(400).json({
+      success: false,
+      message: error.message || "Failed to update profile.",
+    });
+  }
+};
+
 module.exports = {
   saveProfile,
   uploadDocument,
@@ -331,4 +373,5 @@ module.exports = {
   fetchPublicContestantById,
   handleUpdateProfilePhoto,
   checkRegistrationPaymentStatus,
+  editContestantProfileController
 };

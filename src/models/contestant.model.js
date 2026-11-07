@@ -51,6 +51,12 @@ const contestantProfileSchema = new mongoose.Schema(
 
     // Step 3 Documents & Photo
     profilePhotoUrl: { type: String, default: "" },
+
+    profilePhotoProvider: {
+      type: String,
+      enum: ["cloudinary", "local"],
+      default: "cloudinary",
+    },
     documents: [
       {
         docType: {
@@ -66,6 +72,12 @@ const contestantProfileSchema = new mongoose.Schema(
         },
         url: { type: String, required: true },
         publicId: { type: String, default: "" },
+
+        provider: {
+          type: String,
+          enum: ["cloudinary", "local"],
+          default: "cloudinary",
+        },
         status: {
           type: String,
           enum: ["pending", "verified", "rejected"],

@@ -11,7 +11,7 @@ const {
   fetchPublicContestants,
   fetchPublicContestantById,
   handleUpdateProfilePhoto,
-  checkRegistrationPaymentStatus,
+  checkRegistrationPaymentStatus,editContestantProfileController
 } = require("../controllers/contestant.controller");
 const { protect } = require("../middleware/auth.middleware");
 const upload = require("../middleware/upload.middleware");
@@ -44,6 +44,13 @@ router.post("/initiate-payment", initiateRegistrationPayment);
 router.post("/pay-fee", initiateRegistrationPayment);
 
 router.get("/my-profile", fetchMyProfile);
-
+router.put(
+  "/edit-profile",
+  upload.fields([
+    { name: "profilePhoto", maxCount: 1 },
+    { name: "identityProof", maxCount: 1 },
+  ]),
+  editContestantProfileController
+);
 module.exports = router;
 

@@ -265,6 +265,54 @@ const createOrUpdateProfile = async (userId, profileData) => {
 };
 
 // Step 3: Upload Document / Photograph
+// const uploadContestantDoc = async (
+//   userId,
+//   docType,
+//   fileBuffer,
+//   originalName,
+// ) => {
+//   const profile = await ContestantProfile.findOne({ userId });
+//   if (!profile) {
+//     throw new Error(
+//       "Contestant profile does not exist. Complete profile form first.",
+//     );
+//   }
+
+//   const uploadRes = await uploadFile(
+//     fileBuffer,
+//     originalName,
+//     "borderbound_docs",
+//   );
+
+//   if (docType === "photograph") {
+//     profile.profilePhotoUrl = uploadRes.url;
+//   }
+
+//   // Replace existing doc of same type or append
+//   const existingDocIndex = profile.documents.findIndex(
+//     (d) => d.docType === docType,
+//   );
+//   if (existingDocIndex > -1) {
+//     profile.documents[existingDocIndex] = {
+//       docType,
+//       url: uploadRes.url,
+//       publicId: uploadRes.publicId,
+//       status: "pending",
+//       uploadedAt: new Date(),
+//     };
+//   } else {
+//     profile.documents.push({
+//       docType,
+//       url: uploadRes.url,
+//       publicId: uploadRes.publicId,
+//       status: "pending",
+//       uploadedAt: new Date(),
+//     });
+//   }
+
+//   await profile.save();
+//   return profile;
+// };
 const uploadContestantDoc = async (
   userId,
   docType,
@@ -272,31 +320,35 @@ const uploadContestantDoc = async (
   originalName,
 ) => {
   const profile = await ContestantProfile.findOne({ userId });
+
   if (!profile) {
     throw new Error(
       "Contestant profile does not exist. Complete profile form first.",
     );
   }
 
-  const uploadRes = await uploadFile(
-    fileBuffer,
-    originalName,
-    "borderbound_docs",
-  );
+  const isPhoto = docType === "photograph";
 
+const uploadRes = await uploadFile(
+  fileBuffer,
+  originalName,
+  isPhoto ? "contestant_photos" : "borderbound_docs"
+);
   if (docType === "photograph") {
     profile.profilePhotoUrl = uploadRes.url;
+    profile.profilePhotoProvider = uploadRes.provider;
   }
 
-  // Replace existing doc of same type or append
   const existingDocIndex = profile.documents.findIndex(
     (d) => d.docType === docType,
   );
+
   if (existingDocIndex > -1) {
     profile.documents[existingDocIndex] = {
       docType,
       url: uploadRes.url,
       publicId: uploadRes.publicId,
+      provider: uploadRes.provider,
       status: "pending",
       uploadedAt: new Date(),
     };
@@ -305,12 +357,14 @@ const uploadContestantDoc = async (
       docType,
       url: uploadRes.url,
       publicId: uploadRes.publicId,
+      provider: uploadRes.provider,
       status: "pending",
       uploadedAt: new Date(),
     });
   }
 
   await profile.save();
+
   return profile;
 };
 
@@ -773,6 +827,7 @@ const updateProfilePhoto = async (userId, fileBuffer, originalName) => {
 
     throw new Error("Contestant profile not found. Check Render logs.");
   }
+
   const uploadRes = await uploadFile(
     fileBuffer,
     originalName,
@@ -780,6 +835,7 @@ const updateProfilePhoto = async (userId, fileBuffer, originalName) => {
   );
 
   profile.profilePhotoUrl = uploadRes.url;
+  profile.profilePhotoProvider = uploadRes.provider;
 
   const existingDocIndex = profile.documents.findIndex(
     (doc) => doc.docType === "photograph",
@@ -788,6 +844,7 @@ const updateProfilePhoto = async (userId, fileBuffer, originalName) => {
   if (existingDocIndex > -1) {
     profile.documents[existingDocIndex].url = uploadRes.url;
     profile.documents[existingDocIndex].publicId = uploadRes.publicId;
+    profile.documents[existingDocIndex].provider = uploadRes.provider;
     profile.documents[existingDocIndex].status = "pending";
     profile.documents[existingDocIndex].uploadedAt = new Date();
   } else {
@@ -795,6 +852,7 @@ const updateProfilePhoto = async (userId, fileBuffer, originalName) => {
       docType: "photograph",
       url: uploadRes.url,
       publicId: uploadRes.publicId,
+      provider: uploadRes.provider,
       status: "pending",
       uploadedAt: new Date(),
     });
@@ -804,6 +862,186 @@ const updateProfilePhoto = async (userId, fileBuffer, originalName) => {
 
   return profile;
 };
+
+
+
+
+
+
+const editContestantProfile = async (userId, profileData, files = []) => {
+  const profile = await ContestantProfile.findOne({ userId });
+
+  if (!profile) {
+    throw new Error("Contestant profile not found.");
+  }
+
+  // Parse JSON fields received through FormData
+  if (typeof profileData.socialMedia === "string") {
+    try {
+      profileData.socialMedia = JSON.parse(profileData.socialMedia);
+    } catch {
+      throw new Error("Invalid social media data.");
+    }
+  }
+
+  if (typeof profileData.emergencyContact === "string") {
+    try {
+      profileData.emergencyContact = JSON.parse(profileData.emergencyContact);
+    } catch {
+      throw new Error("Invalid emergency contact data.");
+    }
+  }
+
+  // Normalize emergency contact
+  if (profileData.emergencyContact !== undefined) {
+    const contact = profileData.emergencyContact;
+
+    profileData.emergencyContact = {
+      ...contact,
+      phone: contact.phone || contact.mobile || "",
+    };
+
+    delete profileData.emergencyContact.mobile;
+  }
+
+  const allowedFields = [
+    "fullName",
+    "dob",
+    "gender",
+    "mobile",
+    "city",
+    "state",
+    "permanentAddress",
+    "occupation",
+    "education",
+    "socialMedia",
+    "emergencyContact",
+    "bio",
+  ];
+
+  for (const field of allowedFields) {
+    if (profileData[field] !== undefined) {
+      profile[field] = profileData[field];
+    }
+  }
+
+  // Validate DOB
+  if (profileData.dob !== undefined) {
+    const parsedDob = new Date(profileData.dob);
+
+    if (Number.isNaN(parsedDob.getTime())) {
+      throw new Error("Please provide a valid date of birth.");
+    }
+
+    const age = Math.floor(
+      (new Date() - parsedDob) / (365.25 * 24 * 60 * 60 * 1000)
+    );
+
+    if (age < 16) {
+      throw new Error("Contestant must be at least 16 years old.");
+    }
+
+    profile.dob = parsedDob;
+    profile.age = age;
+  }
+
+  // Validate full name
+  if (profileData.fullName !== undefined) {
+    const fullName = profileData.fullName.trim();
+
+    if (!fullName) {
+      throw new Error("Full name cannot be empty.");
+    }
+
+    profile.fullName = fullName;
+  }
+
+  // Update social media without removing existing values
+  if (profileData.socialMedia !== undefined) {
+    profile.socialMedia = {
+      ...(profile.socialMedia?.toObject?.() || profile.socialMedia || {}),
+      ...profileData.socialMedia,
+    };
+  }
+
+  // Update Profile Photo and Documents
+  for (const file of files) {
+    const fieldName = file.fieldname;
+
+    const isProfilePhoto = [
+      "profilePhoto",
+      "photograph",
+      "photo",
+    ].includes(fieldName);
+
+    // Map frontend field names to database document types
+    let docType;
+
+    if (isProfilePhoto) {
+      docType = "photograph";
+    } else if (
+      fieldName === "identityProof" ||
+      fieldName === "identity_proof"
+    ) {
+      docType = "identity_proof";
+    } else {
+      throw new Error(`Unsupported file field: ${fieldName}`);
+    }
+
+    const uploadRes = await uploadFile(
+      file.buffer,
+      file.originalname,
+      isProfilePhoto ? "contestant_photos" : "borderbound_docs"
+    );
+
+    if (isProfilePhoto) {
+      profile.profilePhotoUrl = uploadRes.url;
+      profile.profilePhotoProvider = uploadRes.provider;
+    }
+
+    const existingDoc = profile.documents.findIndex(
+      (doc) => doc.docType === docType
+    );
+
+    const documentData = {
+      docType,
+      url: uploadRes.url,
+      publicId: uploadRes.publicId,
+      provider: uploadRes.provider,
+      status: "pending",
+      uploadedAt: new Date(),
+    };
+
+    if (existingDoc > -1) {
+      profile.documents[existingDoc] = documentData;
+    } else {
+      profile.documents.push(documentData);
+    }
+  }
+
+  await profile.save();
+
+  const user = await User.findById(userId);
+
+  if (user) {
+    user.fullName = profile.fullName;
+    user.dob = profile.dob;
+    user.gender = profile.gender;
+    user.mobile = profile.mobile;
+    user.city = profile.city;
+    user.state = profile.state;
+
+    await user.save();
+  }
+
+  return profile;
+};
+
+
+
+
+
+
 
 module.exports = {
   createOrUpdateProfile,
@@ -817,4 +1055,5 @@ module.exports = {
   sendPendingPaymentReminders,
   updateProfilePhoto,
   verifyAndSyncRegistrationPayment,
+  editContestantProfile
 };
