@@ -40,7 +40,7 @@ const getRegistrationFeeInfo = (currentDate = new Date(), config = null) => {
   const phase1Start = new Date(year, 9, 5, 0, 0, 0); // 5 October
 //  const phase2Start = new Date(year, 9, 31, 0, 0, 0); // 31 October
 const phase2Start = new Date(year, 10, 1, 0, 0, 0);
- const regEnd = new Date(year, 10, 15, 23, 59, 59); // 15 November
+ const regEnd = new Date(year, 10, 16, 23, 59, 59); // 15 November
 
   if (currentDate < phase1Start) {
     return {
@@ -69,7 +69,7 @@ const phase2Start = new Date(year, 10, 1, 0, 0, 0);
       phaseName: "Early Bird Registration (5 Oct – 30 Oct)",
       amount: config?.regFeePhase1 || 499,
       nextPhaseAt: phase2Start,
-      nextAmount: config?.regFeePhase2 || 1499,
+      nextAmount: config?.regFeePhase2 || 499,
     };
   }
 
