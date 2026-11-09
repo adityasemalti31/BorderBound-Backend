@@ -66,6 +66,7 @@ app.use(
     origin: [
       "https://theborderbound.in",
       "https://www.theborderbound.in",
+      "https://borderbound-admin.onrender.com"
     ],
     credentials: true,
   })
