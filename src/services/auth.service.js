@@ -95,18 +95,14 @@ const registerUser = async (data) => {
   }
 
   const existingUser = await User.findOne({
-    $or: [{ email: normalizedEmail }, { mobile }],
-  }).select("email mobile");
+  email: normalizedEmail,
+}).select("email");
 
-  if (existingUser) {
-    if (existingUser.email === normalizedEmail) {
-      throw new Error("Email already registered");
-    }
+if (existingUser) {
+  throw new Error("Email already registered");
+}
 
-    // if (existingUser.mobile === mobile) {
-    //   throw new Error("Mobile number already registered");
-    // }
-  }
+  
 
   const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -132,20 +128,16 @@ const registerUser = async (data) => {
       token,
     };
   } catch (error) {
-    if (error?.code === 11000) {
-      if (error.keyPattern?.email) {
-        throw new Error("Email already registered");
-      }
-
-      // if (error.keyPattern?.mobile) {
-      //   throw new Error("Mobile number already registered");
-      // }
-
-      throw new Error("Account already exists");
+  if (error?.code === 11000) {
+    if (error.keyPattern?.email) {
+      throw new Error("Email already registered");
     }
 
-    throw error;
+    throw new Error("Account already exists");
   }
+
+  throw error;
+}
 };
 
 const loginUser = async (email, password) => {
