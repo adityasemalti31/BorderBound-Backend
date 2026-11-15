@@ -103,9 +103,9 @@ const registerUser = async (data) => {
       throw new Error("Email already registered");
     }
 
-    if (existingUser.mobile === mobile) {
-      throw new Error("Mobile number already registered");
-    }
+    // if (existingUser.mobile === mobile) {
+    //   throw new Error("Mobile number already registered");
+    // }
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
@@ -137,9 +137,9 @@ const registerUser = async (data) => {
         throw new Error("Email already registered");
       }
 
-      if (error.keyPattern?.mobile) {
-        throw new Error("Mobile number already registered");
-      }
+      // if (error.keyPattern?.mobile) {
+      //   throw new Error("Mobile number already registered");
+      // }
 
       throw new Error("Account already exists");
     }
