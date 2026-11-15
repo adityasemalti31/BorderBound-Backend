@@ -829,10 +829,10 @@ const updateProfilePhoto = async (userId, fileBuffer, originalName) => {
   }
 
   const uploadRes = await uploadFile(
-    fileBuffer,
-    originalName,
-    "borderbound_docs",
-  );
+  fileBuffer,
+  originalName,
+  "contestant_photos"
+);
 
   profile.profilePhotoUrl = uploadRes.url;
   profile.profilePhotoProvider = uploadRes.provider;
