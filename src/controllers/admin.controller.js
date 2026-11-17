@@ -9,14 +9,20 @@ const {
   selectWildcards,
   certifyFinalResults,
   updateSystemConfig,
-  changeAdminPassword
+  changeAdminPassword,
+  getAllUsers,
+  getUserById,
+  updateUser,
 } = require("../services/admin.service");
 const VoteTransaction = require("../models/voteTransaction.model");
 
 const handleReviewApplication = async (req, res, next) => {
   try {
     const { action, rejectionReason } = req.body;
-    const result = await reviewApplication(req.params.id, { action, rejectionReason });
+    const result = await reviewApplication(req.params.id, {
+      action,
+      rejectionReason,
+    });
     res.status(200).json(result);
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
@@ -64,7 +70,11 @@ const handleInvalidateVote = async (req, res, next) => {
     const { transactionId, voterIp, reason } = req.body;
 
     if (transactionId) {
-      const result = await invalidateVoteTransaction(transactionId, req.user._id, reason);
+      const result = await invalidateVoteTransaction(
+        transactionId,
+        req.user._id,
+        reason,
+      );
       return res.status(200).json(result);
     } else if (voterIp) {
       const result = await invalidateVotesByIp(voterIp, req.user._id, reason);
@@ -82,7 +92,14 @@ const handleInvalidateVote = async (req, res, next) => {
 
 const fetchVoteAuditLogs = async (req, res, next) => {
   try {
-    const { status, contestantId, voterIp, page = 1, limit = 20, exportAll } = req.query;
+    const {
+      status,
+      contestantId,
+      voterIp,
+      page = 1,
+      limit = 20,
+      exportAll,
+    } = req.query;
     const query = {};
     if (status) query.status = status;
     if (contestantId) query.contestantId = contestantId;
@@ -168,9 +185,6 @@ const handleUpdateConfig = async (req, res, next) => {
   }
 };
 
-
-
-
 const changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword, confirmPassword } = req.body;
@@ -196,15 +210,69 @@ const changePassword = async (req, res) => {
       });
     }
 
-    await changeAdminPassword(
-      req.user.id,
-      currentPassword,
-      newPassword
-    );
+    await changeAdminPassword(req.user.id, currentPassword, newPassword);
 
     return res.status(200).json({
       success: true,
       message: "Password changed successfully",
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// ==========================================
+// USER MANAGEMENT CONTROLLERS
+// ==========================================
+
+// GET ALL USERS
+const fetchAllUsers = async (req, res) => {
+  try {
+    const result = await getAllUsers(req.query);
+
+    return res.status(200).json({
+      success: true,
+      message: "Users fetched successfully.",
+      data: result,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// GET SINGLE USER DETAILS
+const fetchUserById = async (req, res) => {
+  try {
+    const user = await getUserById(req.params.id);
+
+    return res.status(200).json({
+      success: true,
+      message: "User details fetched successfully.",
+      data: user,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// UPDATE USER + CONTESTANT PROFILE + VOTES
+const handleUpdateUser = async (req, res) => {
+  try {
+    const result = await updateUser(req.params.id, req.body);
+
+    return res.status(200).json({
+      success: true,
+      message: "User updated successfully.",
+      data: result,
     });
   } catch (error) {
     return res.status(400).json({
@@ -225,5 +293,8 @@ module.exports = {
   handleSelectWildcards,
   handleCertifyResults,
   handleUpdateConfig,
-  changePassword
+  changePassword,
+  fetchAllUsers,
+  fetchUserById,
+  handleUpdateUser,
 };

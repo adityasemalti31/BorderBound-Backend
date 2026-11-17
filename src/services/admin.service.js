@@ -425,6 +425,208 @@ const changeAdminPassword = async (userId, currentPassword, newPassword) => {
 
 
 
+// ==========================================
+// USER MANAGEMENT SERVICES
+// ==========================================
+
+// 1. Get All Users
+const getAllUsers = async ({
+  search,
+  role,
+  status,
+  page = 1,
+  limit = 20,
+}) => {
+  const query = {};
+
+  if (role) query.role = role;
+  if (status) query.status = status;
+
+  if (search) {
+    const searchRegex = new RegExp(
+      search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+      "i"
+    );
+
+    query.$or = [
+      { fullName: searchRegex },
+      { email: searchRegex },
+      { mobile: searchRegex },
+      { city: searchRegex },
+      { state: searchRegex },
+    ];
+  }
+
+  page = Math.max(1, Number(page) || 1);
+  limit = Math.min(100, Math.max(1, Number(limit) || 20));
+
+  const skip = (page - 1) * limit;
+
+  const [users, total] = await Promise.all([
+    User.find(query)
+      .select("-password -resetPasswordToken -resetPasswordExpires")
+      .populate({
+        path: "contestantProfile",
+        select: "applicationId slug status isLive totalValidVotes rank selectionStatus profilePhotoUrl city state",
+      })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+
+    User.countDocuments(query),
+  ]);
+
+  return {
+    users,
+    pagination: {
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+    },
+  };
+};
+
+
+// 2. Get Single User Details
+const getUserById = async (userId) => {
+  const user = await User.findById(userId)
+    .select("-password -resetPasswordToken -resetPasswordExpires")
+    .populate({
+      path: "contestantProfile",
+    })
+    .lean();
+
+  if (!user) {
+    throw new Error("User not found.");
+  }
+
+  // Fallback in case contestantProfile reference is missing
+  if (!user.contestantProfile) {
+    const profile = await ContestantProfile.findOne({
+      userId: user._id,
+    }).lean();
+
+    user.contestantProfile = profile || null;
+  }
+
+  return user;
+};
+
+
+// 3. Update User + Contestant Profile + Votes
+const updateUser = async (userId, updates) => {
+  const user = await User.findById(userId);
+
+  if (!user) {
+    throw new Error("User not found.");
+  }
+
+  const allowedUserFields = [
+    "fullName",
+    "mobile",
+    "email",
+    "dob",
+    "gender",
+    "city",
+    "state",
+    "role",
+    "status",
+  ];
+
+  const allowedProfileFields = [
+    "fullName",
+    "dob",
+    "age",
+    "gender",
+    "mobile",
+    "email",
+    "city",
+    "state",
+    "permanentAddress",
+    "occupation",
+    "education",
+    "bio",
+    "socialMedia",
+    "emergencyContact",
+    "status",
+    "isLive",
+    "selectionStatus",
+    "rejectionReason",
+  ];
+
+  // Update User fields
+  for (const field of allowedUserFields) {
+    if (updates[field] !== undefined) {
+      user[field] = updates[field];
+    }
+  }
+
+  await user.save();
+
+  let updatedProfile = null;
+
+  // Update Contestant Profile
+  const profileUpdates = updates.contestantProfile || {};
+
+  const hasProfileUpdates =
+    Object.keys(profileUpdates).some(
+      (field) => allowedProfileFields.includes(field)
+    ) || updates.totalValidVotes !== undefined;
+
+  if (hasProfileUpdates) {
+    const profile = await ContestantProfile.findOne({
+      userId: user._id,
+    });
+
+    if (!profile) {
+      throw new Error("Contestant profile not found for this user.");
+    }
+
+    for (const field of allowedProfileFields) {
+      if (profileUpdates[field] !== undefined) {
+        profile[field] = profileUpdates[field];
+      }
+    }
+
+    // Admin Vote Management
+    if (updates.totalValidVotes !== undefined) {
+      const newVotes = Number(updates.totalValidVotes);
+
+      if (
+        !Number.isSafeInteger(newVotes) ||
+        newVotes < 0
+      ) {
+        throw new Error("Votes must be a valid non-negative integer.");
+      }
+
+      profile.totalValidVotes = newVotes;
+    }
+
+    await profile.save();
+
+    // Refresh leaderboard after vote changes
+    if (updates.totalValidVotes !== undefined) {
+      await refreshLeaderboardRanks();
+    }
+
+    updatedProfile = profile;
+  }
+
+  const updatedUser = await User.findById(userId)
+    .select("-password -resetPasswordToken -resetPasswordExpires")
+    .populate("contestantProfile")
+    .lean();
+
+  return {
+    user: updatedUser,
+    contestantProfile: updatedProfile,
+  };
+};
+
+
+
 module.exports = {
   reviewApplication,
   getApplications,
@@ -436,7 +638,10 @@ module.exports = {
   selectWildcards,
   certifyFinalResults,
   updateSystemConfig,
-  changeAdminPassword
+  changeAdminPassword,
+  getAllUsers,
+  getUserById,
+  updateUser
 };
 
 
