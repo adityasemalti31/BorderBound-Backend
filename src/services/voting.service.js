@@ -12,7 +12,7 @@ const {
   verifyPayUPaymentWithServer,
 } = require("./payment.service");
 
-const MAX_VOTES_PER_ORDER = 1000;
+const MAX_VOTES_PER_ORDER = 10000;
 
 const getSystemConfig = async () => {
   let config = await SystemConfig.findOne({
